@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spotube"
+version = "0.0.1"
+authors = [
+  { name="Giorgos Nikolaou", email="giorgosnl17@gmail.com" },
+]
+
+dependencies = [
+"anyio",
+"async-timeout",
+"beautifulsoup4",
+"Brotli",
+"certifi",
+"charset-normalizer",
+"coverage",
+"deprecation",
+"eyed3",
+"filetype",
+"h11",
+"httpcore",
+"httpx",
+"idna",
+"lyricsgenius",
+"mutagen",
+"packaging",
+"Pillow",
+"pycryptodomex",
+"redis",
+"requests",
+"rfc3986",
+"six",
+"sniffio",
+"soupsieve",
+"spotipy",
+"toml",
+"tqdm",
+"urllib3",
+"websockets",
+"youtube-search-python",
+"yt-dlp",
+]
+
+description = "A Python package to download Spotify playlists locally including the cover art, metadata and lyrics by leveraging the Spotify, YouTube and Genius APIs."
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: Free for non-commercial use",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/GiorgosNik/spotube-package"
+"Bug Tracker" = "https://github.com/GiorgosNik/spotube-package/issues"

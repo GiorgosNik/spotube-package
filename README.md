@@ -1,12 +1,11 @@
 # Spotube
 
-Spotube is a Python application that allows the user to download local `.mp3` copies of Spotify playlists, including cover art, artist information and lyrics.
+Spotube is a Python package that allows the user to download local `.mp3` copies of Spotify playlists, including cover art, artist information and lyrics.
 
 ## Description
 
-The application can be used either as a [UI based application](#ui-version) or as a [command line tool](#cli-version).
-In either case, the general principles of the application remain the same:\
-The user provides the link to a public spotify playlist, and, optionally the directory to save the downloaded songs.
+The package can be used to download Spotify playlists, retrieving and pairing each song with the cover art as seen on Spotify, as well as any relevant metadata.
+The user provides the link to a public spotify playlist, API keys for Spotify and Genius, and, optionally the directory to save the downloaded songs.
 The application will then:
 
 - Query the Spotify API for information on each song in the playlist, including the official name, artists, album cover art etc.
@@ -15,74 +14,46 @@ The application will then:
 - Query the LyricsGenius API to retrieve the song lyrics, if available.
 - Edit the .mp3 tags of the downloaded song to set the artist and album information, add the lyrics and set the cover art.
 
+## Obtaining API keys
+
+For instructions on how to generate the two sets of API keys needed to run the application, please refer to:
+
+- [The Spotify API guide](https://developer.spotify.com/documentation/web-api/)
+- [The Genius API guide](https://docs.genius.com/)
+
+## Dependencies
+
+In order to convert the YouTube videos to `.mp3` format, you need to have ffmpeg installed in your system.
+To do this, follow the instructions relevant to your system:
+
+### Ubuntu:
+
+```
+sudo apt install software-properties-common
+sudo apt update
+sudo add-apt-repository ppa:jonathonf/ffmpeg-4
+sudo apt install ffmpeg
+```
+
+### Windows:
+
+- Download ffmpeg from the [ffmpeg downloads page](https://ffmpeg.org/download.html)
+- Extract the downloaded archive
+- Add the directory where ffmpeg was extracted to the PATH
+
 ## Installation
 
-To set up the application, follow these steps:
-
-- Download the project files
-- Install the required Python dependencies by running:
-  ```
-  pip install -r requirements.txt
-  ```
-- Install ffmpeg: This step differs based on your operating system:
-  - For Windows systems, the ffmpeg executable is included in the project files. When first launching the app the executable will be extracted to the project`s root directory.
-  - Unix users will need to install ffmpeg through the console. For example, in Ubuntu run:
-  ```
-  sudo apt-get install ffmpeg
-  ```
-  Attempting to run the app without having ffmpeg installed will result in an informative message with installation instructions.
-
-## UI Version
-
-To run the UI version of Spotube:
+To install the package using pip:
 
 ```
-python3 spotube_ui.py
+pip install spotube
 ```
 
-When first starting the app, the user might be asked to perform a first time installation. For more information see the [Installation](#installation) section.
+## Instructions and Examples
 
-![Initial State](images/initial_ui.png)\
-_The initial state of the UI_
-
-### UI Guide
-
-To download a spotify playlist:
-
-- Enter the link in the input field labeled `Playlist URL`.
-- Click `Folder` and using the menu, select the location where the songs will be stored. \
-  (This step is optional. If no folder is selected, the songs will be saved in a new folder named `Songs` in the current directory.)
-- Click `Download`.
-
-The UI will be updated to display the cover art of the current song, it`s title, the elapsed time and the estimated time until the download is complete.
-The progress bar will fill up accordingly.
-
-![Downloading](images/progress.gif)\
-_Dynamic UI updates_
-
-## CLI Version
-
-To run the CLI version of Spotube:
-
-```
-python3 spotube_cli.py [URL] (Optional)[DIRECTORY]
-```
-
-Where:
-
-- {URL}: The address of the Spotify playlist to download.
-- {DIRECTORY}: The directory to store the songs. If empty, `./Songs` will be used by default.
-
-Similarly to the UI version, the app will check if ffmpeg is installed. For more information see the [Installation](#installation) section.
-Next, the system will validate the given arguments. If they are invalid, eg. the link is wrong, or the user does not have access to the specified directory, the app will exit.
-
-If all arguments are validated, the download will start.
-Two progress bars will appear:
-
-- The first bar tracks the overall progress of downloading the playlist.
-- The second progress tracks of downloading the specific song, displaying it`s name and the current operation being performed.
+This section is under construction.
 
 ## Disclaimer
 
 Spotube is aimed strictly at personal use, as per the YouTube, Spotify and LyricsGenius license agreements. Sharing the
-content collected by using this application, or using it for profit is strictly prohibited.
+content collected by using this application, or using it for profit is strictly prohibited. For more information, please read the LICENSE file included with this distribution.
