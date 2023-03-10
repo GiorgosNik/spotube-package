@@ -306,11 +306,11 @@ def create_audio_downloader(directory=DEFAULT_DIR):
 # Setup ffmpeg if not present
 def ffmpeg_error_message():
     if os.name == "nt":
-        raise Exception("Spotube requires ffmpeg. Install ffmpeg and restart the app")
+        raise RuntimeError("Spotube requires ffmpeg. Install ffmpeg and restart the app")
     elif os.name == "posix":
         # Unix
         # Check if ffmpeg is installed
-        raise Exception(
+        raise RuntimeError(
             "Install ffmpeg by running:\n sudo apt-get install ffmpeg, then restart this program."
         )
 

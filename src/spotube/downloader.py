@@ -74,23 +74,21 @@ class downloader:
         try:
             self.tokens["spotify"].playlist_tracks(playlist_url)
         except Exception as e:
-            print(str(e))
-            print("Playlist Link Not Found")
             return False
         return True
 
     def get_progress(self):
-        utils.fetch_messages()
+        utils.fetch_messages(self)
         return self.progress
 
     def get_total(self):
-        utils.fetch_messages()
+        utils.fetch_messages(self)
         return self.total
 
     def get_current_song(self):
-        utils.fetch_messages()
+        utils.fetch_messages(self)
         return self.current_song
 
     def get_eta(self):
-        utils.fetch_messages()
+        utils.fetch_messages(self)
         return self.eta
