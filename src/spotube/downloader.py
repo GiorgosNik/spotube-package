@@ -72,7 +72,9 @@ class downloader:
 
     def validate_playlist_url(self, playlist_url):
         try:
-            self.tokens["spotify"].playlist_tracks(playlist_url)
+            self.tokens["spotify"].playlist_items(
+                playlist_url, additional_types=("track",)
+            )
         except Exception:
             return False
         return True

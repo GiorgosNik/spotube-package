@@ -12,7 +12,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import lyricsgenius
 from zipfile import ZipFile
 import subprocess
-
+import sys
 
 EXIT = "EXIT"
 DEFAULT_DIR = "./Songs"
@@ -126,7 +126,8 @@ def download_song(given_link, song_info, downloader, directory=DEFAULT_DIR):
 
 
 def get_songs(playlist_link, spotify_api):
-    results = spotify_api.playlist_tracks(playlist_link)
+    results = spotify_api.playlist_items(playlist_link, additional_types=('track',))
+    spotify_api
     songs = results["items"]
 
     while results["next"]:
@@ -249,7 +250,7 @@ def download_playlist(
         if not termination_channel.empty():
             message = termination_channel.get()
             if message == EXIT:
-                exit()
+                return
 
         # Update tqdm progress bar
         playlist_progress.update(n=1)
