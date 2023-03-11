@@ -1,4 +1,7 @@
 import unittest
+import time
+import os
+import shutil
 from src.spotube.downloader import downloader
 
 # Testing API KEYS
@@ -6,8 +9,17 @@ SPOTIFY_ID = "ff55dcadd44e4cb0819ebe5be80ab687"
 SPOTIFY_SECRET = "5539f7392ae94dd5b3dfc1d57381303a"
 GENIUS_TOKEN = "5dRV7gMtFLgnlF632ZzqZutSsvPC0IWyFUJ1W8pWHj185RAMFgR4FtX76ckFDjFZ"
 
-VALID_PLAYLIST= "https://open.spotify.com/playlist/1jgaUl1FGzK76PPEn6i43f?si=f5b622467318460d"
-INVALID_PLAYLIST = "https://open.spotify.com/playlist/3zdqcFFsbUssss8oFbEELc?si=1a7c2641ae08404c"
+########################################################
+# The valid playlist contains:
+# - C'est pas d'ma faute c'est l'mood by Chinwvr
+# - TRAP by Eryn Martin
+#########################################################
+VALID_PLAYLIST = (
+    "https://open.spotify.com/playlist/05MWSPxUUWA0d238WFvkKA?si=0edd9cedff474f88"
+)
+INVALID_PLAYLIST = (
+    "https://open.spotify.com/playlist/3zdqcFFsbUssss8oFbEELc?si=1a7c2641ae08404c"
+)
 
 
 class TestDownloader(unittest.TestCase):
@@ -53,5 +65,34 @@ class TestDownloader(unittest.TestCase):
         eta = test_downloader.get_eta()
         self.assertEqual(eta, None)
 
-if __name__ == '__main__':
+    def test_start_downloader(self):
+        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+
+        test_downloader.start_downloader(VALID_PLAYLIST)
+
+        while test_downloader.get_progress() != test_downloader.get_total():
+            time.sleep(1)
+
+        self.assertTrue(
+            os.path.exists("./Songs/TRAP.mp3")
+            and os.path.exists("./Songs/C'est pas d'ma faute c'est l'mood.mp3")
+        )
+
+        shutil.rmtree("./Songs")
+
+    def test_stop_downloader(self):
+        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+
+        test_downloader.start_downloader(VALID_PLAYLIST)
+        test_downloader.stop_downloader()
+
+        self.assertTrue(
+            os.path.exists("./Songs/C'est pas d'ma faute c'est l'mood.mp3")
+            and not os.path.exists("./Songs/TRAP.mp3")
+        )
+
+        shutil.rmtree("./Songs")
+
+
+if __name__ == "__main__":
     unittest.main()
