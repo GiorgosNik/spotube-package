@@ -136,7 +136,6 @@ dmypy.json
 
 # Sonarqube Files
 .scannerwork
-sonar-project.properties
 
 # Code Config
 .vscode
