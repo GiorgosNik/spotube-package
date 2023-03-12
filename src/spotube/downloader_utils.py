@@ -13,9 +13,9 @@ import lyricsgenius
 from zipfile import ZipFile
 import subprocess
 import sys
+from pydub import AudioSegment
 
 EXIT = "EXIT"
-DEFAULT_DIR = "./Songs"
 
 
 def get_lyrics(name_search, artist_search, genius_obj):
@@ -37,7 +37,7 @@ def get_lyrics(name_search, artist_search, genius_obj):
     return formatted_lyrics
 
 
-def set_tags(song_info, genius_obj, directory=DEFAULT_DIR):
+def set_tags(song_info, genius_obj, directory):
     audio_file = eyed3.load(directory + "/" + song_info["name"] + ".mp3")
 
     if audio_file.tag is None:
@@ -104,7 +104,7 @@ def download_image(song_info):
             shutil.copyfileobj(image_request.raw, f)
 
 
-def download_song(given_link, song_info, downloader, directory=DEFAULT_DIR):
+def download_song(given_link, song_info, downloader, directory):
     attempts = 0
 
     while attempts <= 3:
@@ -119,15 +119,14 @@ def download_song(given_link, song_info, downloader, directory=DEFAULT_DIR):
             os.rename(latest_file, directory + "/" + song_info["name"] + ".mp3")
             return
 
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             print(str(e))
             attempts += 1
             continue
 
 
 def get_songs(playlist_link, spotify_api):
-    results = spotify_api.playlist_items(playlist_link, additional_types=('track',))
-    spotify_api
+    results = spotify_api.playlist_items(playlist_link, additional_types=("track",))
     songs = results["items"]
 
     while results["next"]:
@@ -177,9 +176,7 @@ def format_song_data(song):
     return info_dict
 
 
-def download_playlist(
-    playlist_url, tokens, channel, termination_channel, directory=DEFAULT_DIR
-):
+def download_playlist(playlist_url, tokens, channel, termination_channel, directory):
     # Set up the folder for the songs
     if not os.path.isdir(directory):
         os.mkdir(directory)
@@ -241,16 +238,10 @@ def download_playlist(
             )
             song_progress.update(n=1)
 
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             print(str(e))
             continue
         song_progress.close()
-
-        # Check for termination message
-        if not termination_channel.empty():
-            message = termination_channel.get()
-            if message == EXIT:
-                return
 
         # Update tqdm progress bar
         playlist_progress.update(n=1)
@@ -264,9 +255,16 @@ def download_playlist(
         eta = get_eta(playlist_progress)
         send_message(channel, type="eta_update", contents=[elapsed, eta])
 
+        # Check for termination message
+        if not termination_channel.empty():
+            message = termination_channel.get()
+            if message == EXIT:
+                return
+
+    normalize_volume_levels(directory)
+
     playlist_progress.close()
 
-    print("Download Complete")
     send_message(channel, type="download_complete", contents=[])
 
 
@@ -284,7 +282,7 @@ def auth_handler(client_id, client_secret, genius):
 
 
 # Create downloader object, pass options
-def create_audio_downloader(directory=DEFAULT_DIR):
+def create_audio_downloader(directory):
     audio_downloader = YoutubeDL(
         {
             "format": "bestaudio",
@@ -307,7 +305,9 @@ def create_audio_downloader(directory=DEFAULT_DIR):
 # Setup ffmpeg if not present
 def ffmpeg_error_message():
     if os.name == "nt":
-        raise RuntimeError("Spotube requires ffmpeg. Install ffmpeg and restart the app")
+        raise RuntimeError(
+            "Spotube requires ffmpeg. Install ffmpeg and restart the app"
+        )
     elif os.name == "posix":
         # Unix
         # Check if ffmpeg is installed
@@ -355,9 +355,31 @@ def handle_message(downloader, message):
         downloader.eta = contents[1]
 
     elif message["type"] == "download_complete":
+        downloader.working = False
         downloader.progress = downloader.total
+
 
 def fetch_messages(downloader):
     if not downloader.channel.empty():
         message = downloader.channel.get()
         handle_message(downloader, message)
+
+
+def match_target_amplitude(sound, target_dBFS):
+    change_in_dBFS = target_dBFS - sound.dBFS
+    return sound.apply_gain(change_in_dBFS)
+
+
+def normalize_volume_levels(directory):
+    if not os.path.isdir(directory):
+        raise ValueError("Invalid directory")
+
+    abs_path = os.path.abspath(directory)
+
+    files = os.listdir(directory)
+
+    for file in files:
+        if file.endswith(".mp3"):
+            sound = AudioSegment.from_file(abs_path + "/" + file, "mp3")
+            normalized_sound = match_target_amplitude(sound, -14.0)
+            normalized_sound.export(abs_path + "/" + file, format="mp3")

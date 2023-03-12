@@ -12,6 +12,7 @@ class downloader:
     ):
         # Initialise the tracking values
         self.progress = 0
+        self.working = False
         self.total = None
         self.current_song = None
         self.eta = None
@@ -32,7 +33,7 @@ class downloader:
             self.spotify_id, self.spotify_api_key, self.genius_api_key
         )
 
-        if not utils.ffmpeg_installed():
+        if not utils.ffmpeg_installed(): # pragma: no cover
             utils.ffmpeg_error_message()
 
     def set_directory(self, directory):
@@ -50,6 +51,7 @@ class downloader:
                 self.directory,
             ],
         )
+        self.working = True
         self.thread.start()
 
     def stop_downloader(self):
@@ -59,6 +61,7 @@ class downloader:
         if self.thread is not None:
             self.thread.join()
 
+        self.working = False
         self.progress = 0
         self.total = None
         self.current_song = None
@@ -94,3 +97,7 @@ class downloader:
     def get_eta(self):
         utils.fetch_messages(self)
         return self.eta
+
+    def is_working(self):
+        utils.fetch_messages(self)
+        return self.working

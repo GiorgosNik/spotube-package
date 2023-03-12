@@ -146,3 +146,6 @@ dmypy.json
 *.webm
 cover_photo.jpg
 *.webm*
+
+# Local Test Main
+main_example.py

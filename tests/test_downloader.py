@@ -1,4 +1,5 @@
 import unittest
+import pytest
 import time
 import os
 import shutil
@@ -22,18 +23,33 @@ INVALID_PLAYLIST = (
 )
 
 
+@pytest.fixture(autouse=True)
+def run_around_tests():
+    if os.path.exists("./Test_Directory"):
+        shutil.rmtree("./Test_Directory")
+    yield
+    if os.path.exists("./Test_Directory"):
+        shutil.rmtree("./Test_Directory")
+
+
 class TestDownloader(unittest.TestCase):
     def test_constructor(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
         self.assertNotEqual(test_downloader, None)
 
     def test_set_directory(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
         test_downloader.set_directory("./test")
         self.assertEqual(test_downloader.directory, "./test")
 
     def test_validate_playlist_url(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
 
         playlist_validity = test_downloader.validate_playlist_url(VALID_PLAYLIST)
         self.assertEqual(playlist_validity, True)
@@ -42,56 +58,67 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(playlist_validity, False)
 
     def test_get_total(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
 
         total = test_downloader.get_total()
         self.assertEqual(total, None)
 
     def test_get_progress(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
 
         progress = test_downloader.get_progress()
         self.assertEqual(progress, 0)
 
     def test_get_current_song(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
 
         current_song = test_downloader.get_current_song()
         self.assertEqual(current_song, None)
 
     def test_get_eta(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
 
         eta = test_downloader.get_eta()
         self.assertEqual(eta, None)
 
     def test_start_downloader(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
 
         test_downloader.start_downloader(VALID_PLAYLIST)
 
-        while test_downloader.get_progress() != test_downloader.get_total():
+        while test_downloader.is_working():
             time.sleep(1)
 
         self.assertTrue(
-            os.path.exists("./Songs/TRAP.mp3")
-            and os.path.exists("./Songs/C'est pas d'ma faute c'est l'mood.mp3")
+            os.path.exists("./Test_Directory/TRAP.mp3")
+            and os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
         )
 
-        shutil.rmtree("./Songs")
-
     def test_stop_downloader(self):
-        test_downloader = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
 
         test_downloader.start_downloader(VALID_PLAYLIST)
         test_downloader.stop_downloader()
 
-        self.assertTrue(
-            os.path.exists("./Songs/C'est pas d'ma faute c'est l'mood.mp3")
-            and not os.path.exists("./Songs/TRAP.mp3")
-        )
+        while test_downloader.is_working():
+            time.sleep(1)
 
-        shutil.rmtree("./Songs")
+        self.assertTrue(
+            os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
+            and not os.path.exists("./Test_Directory/TRAP.mp3")
+        )
 
 
 if __name__ == "__main__":

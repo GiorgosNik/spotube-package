@@ -4,45 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "spotube"
-version = "0.0.1"
+dynamic = ["dependencies"]
+version = "0.0.3"
 authors = [
   { name="Giorgos Nikolaou", email="giorgosnl17@gmail.com" },
 ]
 
-dependencies = [
-"anyio",
-"async-timeout",
-"beautifulsoup4",
-"Brotli",
-"certifi",
-"charset-normalizer",
-"coverage",
-"deprecation",
-"eyed3",
-"filetype",
-"h11",
-"httpcore",
-"httpx",
-"idna",
-"lyricsgenius",
-"mutagen",
-"packaging",
-"Pillow",
-"pycryptodomex",
-"redis",
-"requests",
-"rfc3986",
-"six",
-"sniffio",
-"soupsieve",
-"spotipy",
-"toml",
-"tqdm",
-"urllib3",
-"websockets",
-"youtube-search-python",
-"yt-dlp",
-]
+dependencies = {file = ["requirements.txt"]}
 
 description = "A Python package to download Spotify playlists locally including the cover art, metadata and lyrics by leveraging the Spotify, YouTube and Genius APIs."
 readme = "README.md"
