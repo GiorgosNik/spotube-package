@@ -127,7 +127,6 @@ def download_song(given_link, song_info, downloader, directory=DEFAULT_DIR):
 
 def get_songs(playlist_link, spotify_api):
     results = spotify_api.playlist_items(playlist_link, additional_types=('track',))
-    spotify_api
     songs = results["items"]
 
     while results["next"]:
