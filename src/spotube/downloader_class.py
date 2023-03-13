@@ -1,6 +1,6 @@
 import threading
 import queue
-import spotube.downloader_utils as utils
+import src.spotube.downloader_utils as utils
 import os
 import subprocess
 from zipfile import ZipFile

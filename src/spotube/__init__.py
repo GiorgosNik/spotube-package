@@ -1,1 +1,1 @@
-from spotube.downloader_class import downloader
+from src.spotube.downloader_class import downloader
