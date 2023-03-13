@@ -4,13 +4,22 @@ build-backend = "hatchling.build"
 
 [project]
 name = "spotube"
-dynamic = ["dependencies"]
-version = "0.0.3"
+version = "0.0.6"
 authors = [
   { name="Giorgos Nikolaou", email="giorgosnl17@gmail.com" },
 ]
 
-dependencies = {file = ["requirements.txt"]}
+dependencies = [
+"eyed3",
+"lyricsgenius",
+"pydub",
+"pytest",
+"requests",
+"spotipy",
+"tqdm",
+"youtube_search_python",
+"yt_dlp",
+]
 
 description = "A Python package to download Spotify playlists locally including the cover art, metadata and lyrics by leveraging the Spotify, YouTube and Genius APIs."
 readme = "README.md"

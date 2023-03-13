@@ -126,8 +126,8 @@ def download_song(given_link, song_info, downloader, directory):
 
 
 def get_songs(playlist_link, spotify_api):
-    results = spotify_api.playlist_items(playlist_link, additional_types=('track',))
-    
+    results = spotify_api.playlist_items(playlist_link, additional_types=("track",))
+
     songs = results["items"]
 
     while results["next"]:
@@ -366,9 +366,9 @@ def fetch_messages(downloader):
         handle_message(downloader, message)
 
 
-def match_target_amplitude(sound, target_dBFS):
-    change_in_dBFS = target_dBFS - sound.dBFS
-    return sound.apply_gain(change_in_dBFS)
+def match_target_amplitude(sound, target_dbfs):
+    change_in_dbfs = target_dbfs - sound.dBFS
+    return sound.apply_gain(change_in_dbfs)
 
 
 def normalize_volume_levels(directory):
@@ -379,8 +379,12 @@ def normalize_volume_levels(directory):
 
     files = os.listdir(directory)
 
+    normalization_progress = tqdm(
+        total=len(files), desc="Normalizing Sound", position=0, leave=False
+    )
     for file in files:
         if file.endswith(".mp3"):
             sound = AudioSegment.from_file(abs_path + "/" + file, "mp3")
             normalized_sound = match_target_amplitude(sound, -14.0)
             normalized_sound.export(abs_path + "/" + file, format="mp3")
+            normalization_progress.update(n=1)

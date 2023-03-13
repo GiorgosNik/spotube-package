@@ -1,6 +1,6 @@
 import threading
 import queue
-import src.spotube.downloader_utils as utils
+import spotube.downloader_utils as utils
 import os
 import subprocess
 from zipfile import ZipFile
@@ -8,7 +8,7 @@ from zipfile import ZipFile
 
 class downloader:
     def __init__(
-        self, spotify_id, spotify_api_key, genius_api_key, directory="./Songs"
+        self, spotify_client_id, spotify_client_secret, genius_api_key, directory="./Songs"
     ):
         # Initialise the tracking values
         self.progress = 0
@@ -17,8 +17,8 @@ class downloader:
         self.current_song = None
         self.eta = None
         self.thread = None
-        self.spotify_id = spotify_id
-        self.spotify_api_key = spotify_api_key
+        self.spotify_client_id = spotify_client_id
+        self.spotify_client_secret = spotify_client_secret
         self.genius_api_key = genius_api_key
         self.directory = directory
 
@@ -30,7 +30,7 @@ class downloader:
 
         # Perform authentication for LyricsGenius and Spotify APIs
         self.tokens = utils.auth_handler(
-            self.spotify_id, self.spotify_api_key, self.genius_api_key
+            self.spotify_client_id, self.spotify_client_secret, self.genius_api_key
         )
 
         if not utils.ffmpeg_installed(): # pragma: no cover
@@ -70,7 +70,7 @@ class downloader:
         self.channel = queue.Queue()
         self.termination_channel = queue.Queue()
         self.tokens = utils.auth_handler(
-            self.spotify_id, self.spotify_api_key, self.genius_api_key
+            self.spotify_client_id, self.spotify_client_secret, self.genius_api_key
         )
 
     def validate_playlist_url(self, playlist_url):
