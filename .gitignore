@@ -149,3 +149,13 @@ cover_photo.jpg
 
 # Local Test Main
 main_example.py
+
+# ffmpeg executables and archives
+ffmpeg
+ffplay
+ffprobe
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
+*.tar.xz
+*.zip

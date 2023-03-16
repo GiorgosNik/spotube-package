@@ -4,11 +4,15 @@ import src.spotube.downloader_utils as utils
 import os
 import subprocess
 from zipfile import ZipFile
-
+import urllib.request
 
 class downloader:
     def __init__(
-        self, spotify_client_id, spotify_client_secret, genius_api_key, directory="./Songs"
+        self,
+        spotify_client_id,
+        spotify_client_secret,
+        genius_api_key,
+        directory="./Songs",
     ):
         # Initialise the tracking values
         self.progress = 0
@@ -33,8 +37,11 @@ class downloader:
             self.spotify_client_id, self.spotify_client_secret, self.genius_api_key
         )
 
-        if not utils.ffmpeg_installed(): # pragma: no cover
-            utils.ffmpeg_error_message()
+        # For testing
+        # utils.download_ffmpeg()
+
+        if not utils.ffmpeg_installed():  # pragma: no cover
+            utils.download_ffmpeg()
 
     def set_directory(self, directory):
         self.directory = directory
@@ -55,7 +62,7 @@ class downloader:
         self.thread.start()
 
     def stop_downloader(self):
-        self.termination_channel.put(utils.EXIT)
+        self.termination_channel.put("EXIT")
 
         # Wait for thread to exit
         if self.thread is not None:

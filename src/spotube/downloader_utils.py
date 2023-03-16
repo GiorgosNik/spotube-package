@@ -12,10 +12,17 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import lyricsgenius
 from zipfile import ZipFile
 import subprocess
-import sys
 from pydub import AudioSegment
+import urllib.request
+from platform import machine
+import tarfile
+import zipfile
 
-EXIT = "EXIT"
+
+FFMPEG_UNIX_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+FFMPEG_UNIX_ARM = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
+FFMPEG_WINDOWS_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+FFMPEG_WINDOWS_X32 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip"
 
 
 def get_lyrics(name_search, artist_search, genius_obj):
@@ -259,7 +266,7 @@ def download_playlist(playlist_url, tokens, channel, termination_channel, direct
         # Check for termination message
         if not termination_channel.empty():
             message = termination_channel.get()
-            if message == EXIT:
+            if message == "EXIT":
                 return
 
     normalize_volume_levels(directory)
@@ -284,22 +291,42 @@ def auth_handler(client_id, client_secret, genius):
 
 # Create downloader object, pass options
 def create_audio_downloader(directory):
-    audio_downloader = YoutubeDL(
-        {
-            "format": "bestaudio",
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }
-            ],
-            "outtmpl": directory + "/downloaded_song.%(ext)s",
-            "quiet": "true",
-            "no_warnings": "true",
-            "noprogress": "true",
-        }
-    )
+    if not ffmpeg_installed():
+        audio_downloader = YoutubeDL(
+            {
+                "format": "bestaudio",
+                "ffmpeg_location": ".",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+                "outtmpl": directory + "/downloaded_song.%(ext)s",
+                "quiet": "true",
+                "no_warnings": "true",
+                "noprogress": "true",
+            }
+        )
+
+    else:
+        audio_downloader = YoutubeDL(
+            {
+                "format": "bestaudio",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+                "outtmpl": directory + "/downloaded_song.%(ext)s",
+                "quiet": "true",
+                "no_warnings": "true",
+                "noprogress": "true",
+            }
+        )
     return audio_downloader
 
 
@@ -372,6 +399,10 @@ def match_target_amplitude(sound, target_dbfs):
 
 
 def normalize_volume_levels(directory):
+    if not ffmpeg_installed():
+        print("WARNING: ffmpeg not found in PATH, volume normalization skipped.")
+        return ()
+
     if not os.path.isdir(directory):
         raise ValueError("Invalid directory")
 
@@ -388,3 +419,71 @@ def normalize_volume_levels(directory):
             normalized_sound = match_target_amplitude(sound, -14.0)
             normalized_sound.export(abs_path + "/" + file, format="mp3")
             normalization_progress.update(n=1)
+
+
+def select_ffmpeg_link():
+    architecture = machine().lower()
+
+    if architecture.find("arm") != -1:
+        architecture = "ARM"
+    elif architecture.find("64") != -1:
+        architecture = "x64"
+    elif architecture.find("86") != -1:
+        architecture = "x86"
+    if os.name == "nt":
+        if architecture == "x64":
+            url = FFMPEG_WINDOWS_X64
+        elif os_version == "x32":
+            url = FFMPEG_WINDOWS_X32
+    elif os.name == "posix":
+        if architecture == "ARM":
+            url = FFMPEG_UNIX_ARM
+        elif architecture == "x64":
+            url = FFMPEG_UNIX_X64
+    else:
+        raise RuntimeError("Unknown OS")
+
+    return url
+
+
+def download_ffmpeg():
+    url = select_ffmpeg_link()
+
+    filename = url.split("/")[-1]
+
+    with DownloadProgressBar(
+        unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]
+    ) as t:
+        urllib.request.urlretrieve(url, filename=filename, reporthook=t.update_to)
+
+    if os.name == "nt":
+        with zipfile.ZipFile(filename, "r") as zip_ref:
+            zip_ref.extractall(".")
+    elif os.name == "posix":
+        with tarfile.open(filename) as archive:
+            members = archive.getmembers()
+            extraction_bar = tqdm(
+                total=len(members), desc="Extracting files", position=1, leave=False
+            )
+            for member in members:
+                if member.isreg() and member.name.split(".")[0] == member.name:
+                    member.name = os.path.basename(member.name)
+                    archive.extract(member, ".")
+                extraction_bar.update(n=1)
+
+        os.remove(filename)
+
+
+class DownloadProgressBar(tqdm):
+    def update_to(self, b=1, bsize=1, tsize=None):
+        if tsize is not None:
+            self.total = tsize
+        self.update(b * bsize - self.n)
+
+    def download_url(url, output_path):
+        with DownloadProgressBar(
+            unit="B", position=0, leave=False, unit_scale=True, desc=url.split("/")[-1]
+        ) as t:
+            urllib.request.urlretrieve(
+                url, filename=output_path, reporthook=t.update_to
+            )
