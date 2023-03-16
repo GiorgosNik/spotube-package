@@ -159,3 +159,6 @@ ffplay.exe
 ffprobe.exe
 *.tar.xz
 *.zip
+
+# PyCharm
+.idea

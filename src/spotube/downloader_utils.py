@@ -433,13 +433,17 @@ def select_ffmpeg_link():
     if os.name == "nt":
         if architecture == "x64":
             url = FFMPEG_WINDOWS_X64
-        elif os_version == "x32":
+        elif architecture == "x32":
             url = FFMPEG_WINDOWS_X32
+        else:
+            raise RuntimeError("Unknown OS")
     elif os.name == "posix":
         if architecture == "ARM":
             url = FFMPEG_UNIX_ARM
         elif architecture == "x64":
             url = FFMPEG_UNIX_X64
+        else:
+            raise RuntimeError("Unknown OS")
     else:
         raise RuntimeError("Unknown OS")
 
@@ -457,8 +461,15 @@ def download_ffmpeg():
         urllib.request.urlretrieve(url, filename=filename, reporthook=t.update_to)
 
     if os.name == "nt":
-        with zipfile.ZipFile(filename, "r") as zip_ref:
-            zip_ref.extractall(".")
+        with zipfile.ZipFile(filename, "r") as archive:
+            files = archive.infolist()
+            for file in files:
+                if file.is_dir():
+                    continue
+                if file.filename.endswith('.exe'):
+                    file.filename = os.path.basename(file.filename)
+                    archive.extract(file, "./")
+
     elif os.name == "posix":
         with tarfile.open(filename) as archive:
             members = archive.getmembers()
@@ -471,7 +482,7 @@ def download_ffmpeg():
                     archive.extract(member, ".")
                 extraction_bar.update(n=1)
 
-        os.remove(filename)
+    os.remove(filename)
 
 
 class DownloadProgressBar(tqdm):
