@@ -421,7 +421,15 @@ def normalize_volume_levels(directory):
             normalization_progress.update(n=1)
 
 
-def select_ffmpeg_link():
+def select_ffmpeg_link(os_type=None):
+    if os_type is not None and os_type != "nt" and os_type != "posix":
+        raise ValueError(
+            "Invalid OS provided.\nUse:\n 'nt' for Windows, 'posix' of Unix"
+        )
+
+    if os_type is None:
+        os_type = os.name
+
     architecture = machine().lower()
 
     if architecture.find("arm") != -1:
@@ -430,14 +438,15 @@ def select_ffmpeg_link():
         architecture = "x64"
     elif architecture.find("86") != -1:
         architecture = "x86"
-    if os.name == "nt":
+
+    if os_type == "nt":
         if architecture == "x64":
             url = FFMPEG_WINDOWS_X64
         elif architecture == "x32":
             url = FFMPEG_WINDOWS_X32
         else:
             raise RuntimeError("Unknown OS")
-    elif os.name == "posix":
+    elif os_type == "posix":
         if architecture == "ARM":
             url = FFMPEG_UNIX_ARM
         elif architecture == "x64":
@@ -450,8 +459,20 @@ def select_ffmpeg_link():
     return url
 
 
-def download_ffmpeg():
-    url = select_ffmpeg_link()
+def get_os_name():
+    return os.name
+
+
+def download_ffmpeg(os_type=None):
+    if os_type is not None and os_type != "nt" and os_type != "posix":
+        raise ValueError(
+            "Invalid OS provided.\nUse:\n 'nt' for Windows, 'posix' of Unix"
+        )
+
+    if os_type is None:
+        os_type = os.name
+
+    url = select_ffmpeg_link(os_type)
 
     filename = url.split("/")[-1]
 
@@ -460,28 +481,39 @@ def download_ffmpeg():
     ) as t:
         urllib.request.urlretrieve(url, filename=filename, reporthook=t.update_to)
 
-    if os.name == "nt":
-        with zipfile.ZipFile(filename, "r") as archive:
-            files = archive.infolist()
-            for file in files:
-                if file.is_dir():
-                    continue
-                if file.filename.endswith('.exe'):
-                    file.filename = os.path.basename(file.filename)
-                    archive.extract(file, "./")
+    if os_type is None:
+        os_type = os.name
 
-    elif os.name == "posix":
-        with tarfile.open(filename) as archive:
-            members = archive.getmembers()
-            extraction_bar = tqdm(
-                total=len(members), desc="Extracting files", position=1, leave=False
-            )
-            for member in members:
-                if member.isreg() and member.name.split(".")[0] == member.name:
-                    member.name = os.path.basename(member.name)
-                    archive.extract(member, ".")
-                extraction_bar.update(n=1)
+    if os_type == "nt":
+        extract_exe_from_zip(filename)
 
+    elif os_type == "posix":
+        extract_bin_from_tarball(filename)
+
+
+def extract_exe_from_zip(filename):
+    with zipfile.ZipFile(filename, "r") as archive:
+        files = archive.infolist()
+        for file in files:
+            if file.is_dir():
+                continue
+            if file.filename.endswith(".exe"):
+                file.filename = os.path.basename(file.filename)
+                archive.extract(file, "./")
+    os.remove(filename)
+
+
+def extract_bin_from_tarball(filename):
+    with tarfile.open(filename) as archive:
+        members = archive.getmembers()
+        extraction_bar = tqdm(
+            total=len(members), desc="Extracting files", position=1, leave=False
+        )
+        for member in members:
+            if member.isreg() and member.name.split(".")[0] == member.name:
+                member.name = os.path.basename(member.name)
+                archive.extract(member, ".")
+            extraction_bar.update(n=1)
     os.remove(filename)
 
 

@@ -41,7 +41,8 @@ class downloader:
         # utils.download_ffmpeg()
 
         if not utils.ffmpeg_installed():  # pragma: no cover
-            utils.download_ffmpeg()
+            os_name = utils.get_os_name()
+            utils.download_ffmpeg(os_type = os_name)
 
     def set_directory(self, directory):
         self.directory = directory
