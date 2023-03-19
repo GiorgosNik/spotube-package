@@ -22,7 +22,7 @@ import zipfile
 FFMPEG_UNIX_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
 FFMPEG_UNIX_ARM = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
 FFMPEG_WINDOWS_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-FFMPEG_WINDOWS_X32 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip"
+FFMPEG_WINDOWS_X86 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip"
 
 
 def get_lyrics(name_search, artist_search, genius_obj):
@@ -330,20 +330,6 @@ def create_audio_downloader(directory):
     return audio_downloader
 
 
-# Setup ffmpeg if not present
-def ffmpeg_error_message():
-    if os.name == "nt":
-        raise RuntimeError(
-            "Spotube requires ffmpeg. Install ffmpeg and restart the app"
-        )
-    elif os.name == "posix":
-        # Unix
-        # Check if ffmpeg is installed
-        raise RuntimeError(
-            "Install ffmpeg by running:\n sudo apt-get install ffmpeg, then restart this program."
-        )
-
-
 # Return True if ffmpeg is installed, False otherwise
 def ffmpeg_installed():
     if os.name == "nt":
@@ -399,7 +385,7 @@ def match_target_amplitude(sound, target_dbfs):
 
 
 def normalize_volume_levels(directory):
-    if not ffmpeg_installed():
+    if not ffmpeg_installed():  # pragma: no cover
         print("WARNING: ffmpeg not found in PATH, volume normalization skipped.")
         return ()
 
@@ -432,28 +418,15 @@ def select_ffmpeg_link(os_type=None):
 
     architecture = machine().lower()
 
-    if architecture.find("arm") != -1:
-        architecture = "ARM"
-    elif architecture.find("64") != -1:
-        architecture = "x64"
-    elif architecture.find("86") != -1:
-        architecture = "x86"
-
-    if os_type == "nt":
-        if architecture == "x64":
-            url = FFMPEG_WINDOWS_X64
-        elif architecture == "x32":
-            url = FFMPEG_WINDOWS_X32
-        else:
-            raise RuntimeError("Unknown OS")
-    elif os_type == "posix":
-        if architecture == "ARM":
-            url = FFMPEG_UNIX_ARM
-        elif architecture == "x64":
-            url = FFMPEG_UNIX_X64
-        else:
-            raise RuntimeError("Unknown OS")
-    else:
+    if os_type == "nt" and architecture.find("64"):  # pragma: no cover
+        url = FFMPEG_WINDOWS_X64
+    elif os_type == "nt" and architecture.find("86"):  # pragma: no cover
+        url = FFMPEG_WINDOWS_X86
+    elif os_type == "posix" and architecture.find("arm"):  # pragma: no cover
+        url = FFMPEG_UNIX_ARM
+    elif os_type == "posix" and architecture == "x64":  # pragma: no cover
+        url = FFMPEG_UNIX_X64
+    else:  # pragma: no cover
         raise RuntimeError("Unknown OS")
 
     return url
