@@ -51,6 +51,7 @@ jobs:
           poetry-version: 1.4.0
 
       - name: Build and publish with poetry
+        if: github.ref == 'refs/heads/main'
         run: | 
           version=$(curl -s 'https://pypi.org/pypi/spotube/json' | jq -r '.info.version')
           poetry version $version
