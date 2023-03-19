@@ -3,7 +3,7 @@ import pytest
 import time
 import os
 import shutil
-from src.spotube.downloader_utils import download_ffmpeg, get_os_name
+from spotube_package.downloader_utils import download_ffmpeg, get_os_name
 
 # Testing API KEYS
 

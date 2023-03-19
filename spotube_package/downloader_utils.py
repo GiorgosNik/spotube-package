@@ -496,6 +496,7 @@ class DownloadProgressBar(tqdm):
             self.total = tsize
         self.update(b * bsize - self.n)
 
+    @staticmethod
     def download_url(url, output_path):
         with DownloadProgressBar(
             unit="B", position=0, leave=False, unit_scale=True, desc=url.split("/")[-1]
