@@ -23,3 +23,7 @@ yt-dlp = "^2023.3.4"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[project.urls]
+"Homepage" = "https://github.com/GiorgosNik/spotube-package"
+"Bug Tracker" = "https://github.com/GiorgosNik/spotube-package/issues"
