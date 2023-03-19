@@ -5,6 +5,7 @@ description = "A Python package to download Spotify playlists locally including 
 authors = ["GiorgosNik <giorgosnl17@gmail.com>"]
 license = "Free for non-commercial use"
 readme = "README.md"
+repository = 'https://github.com/GiorgosNik/spotube-package'
 packages = [{include = "spotube_package"}]
 
 [tool.poetry.dependencies]
@@ -23,7 +24,3 @@ yt-dlp = "^2023.3.4"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[project.urls]
-"Homepage" = "https://github.com/GiorgosNik/spotube-package"
-"Bug Tracker" = "https://github.com/GiorgosNik/spotube-package/issues"
