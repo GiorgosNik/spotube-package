@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "spotube-package"
+name = "spotube"
 version = "0.1.0"
 description = "A Python package to download Spotify playlists locally including the cover art, metadata and lyrics by leveraging the Spotify, YouTube and Genius APIs."
 authors = ["GiorgosNik <giorgosnl17@gmail.com>"]

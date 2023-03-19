@@ -18,6 +18,10 @@ jobs:
           sudo add-apt-repository ppa:jonathonf/ffmpeg-4
           sudo apt install ffmpeg
 
+      - name: Install jq
+        run: |
+          sudo apt install jq
+
       - name: Install Project dependencies
         uses: py-actions/py-dependency-install@v4
 
@@ -41,10 +45,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: Run image
+      - name: Run poetry image
         uses: abatilo/actions-poetry@v2
         with:
           poetry-version: 1.4.0
 
-      - name: View poetry --help
-        run: poetry --help
+      - name: Build and publish with poetry
+        run: | 
+          version=$(curl -s 'https://pypi.org/pypi/spotube/json' | jq -r '.info.version')
+          poetry version $version
+          poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
+          poetry version minor
+          poetry build
+          poetry publish
