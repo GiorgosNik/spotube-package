@@ -106,6 +106,6 @@ class downloader:
         utils.fetch_messages(self)
         return self.eta
 
-    def is_working(self):
+    def downloader_active(self):
         utils.fetch_messages(self)
         return self.working

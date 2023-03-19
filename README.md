@@ -13,6 +13,7 @@ The application will then:
 - Using the most relevant link, download the video in the highest possible quality, and convert to .mp3 format.
 - Query the LyricsGenius API to retrieve the song lyrics, if available.
 - Edit the .mp3 tags of the downloaded song to set the artist and album information, add the lyrics and set the cover art.
+- Optionally, normalize the volume level of all downloaded `.mp3` files, to remedy the possible volume difference of YouTube videos from one another.
 
 ## Obtaining API keys
 
@@ -23,8 +24,9 @@ For instructions on how to generate the two sets of API keys needed to run the a
 
 ## Dependencies
 
-In order to convert the YouTube videos to `.mp3` format, you need to have ffmpeg installed in your system.
-To do this, follow the instructions relevant to your system:
+In order to utilize all the features provided by Spotube, it is necessary to have ffmpeg installed and configured in your system`s PATH variable. If no ffmpeg installation is detected, Spotube will attempt to download the [prebuilt ffmpeg binaries](https://github.com/yt-dlp/FFmpeg-Builds) kindly provided by the yt-dlp team. This will allow Spotube to function, but will disable some advanced features like volume normalization.
+
+To install ffmpeg manually, follow the instructions relevant to your system:
 
 ### Ubuntu:
 
@@ -51,7 +53,69 @@ pip install spotube
 
 ## Instructions and Examples
 
-This section is under construction.
+### Simple Use Case
+
+The simplest way to use Spotube involves creating a downloader object using the `Spotify Client ID` and `Spotify Client Secret` and the `Genius API Token`, and then calling start_downloader with the link of a Spotify Playlist as the argument. The downloaded songs will be stored in the directory `./Songs` by default.
+This simple use case looks like this:
+
+```
+from spotube import downloader
+
+SPOTIFY_ID = {YOUR SPOTIFY API CLIENT ID}
+SPOTIFY_SECRET = {YOUR SPOTIFY API CLIENT SECRET}
+GENIUS_TOKEN = {YOUR GENIUS API TOKEN}
+PLAYLIST_LINK = {THE LINK TO A SPOTIFY PLAYLIST}
+
+my_downloaded = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN)
+
+my_downloaded.start_downloader(VALID_PLAYLIST)
+```
+
+### Download Directory
+
+You can set the directory to download the songs to, in one of two ways:
+
+By passing the optional argument `directory` in the downloaded constructor:
+
+```
+my_downloaded = downloader(SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory = "./Songs")
+```
+
+By setting the directory after the downloader object has been created:
+
+```
+my_downloaded = set_directory("./Songs")
+```
+
+### Stopping the Downloader
+
+You can stop the download process using the `stop_downloader` method on a downloader object:
+
+```
+my_downloaded = stop_downloader()
+```
+
+This will reset all download information, like the ETA and progress.
+
+### Validate Playlist URL
+
+You can examine if a Spotify playlist URL is valid by using the `validate_playlist_url` method:
+
+```
+my_downloaded = validate_playlist_url({LINK TO A PLAYLIST})
+```
+
+This method will return `True` for a valid link, `False` otherwise.
+
+### Status Methods
+
+The downloader class implements various methods to track the status of the downloader. These include:
+
+- `get_progress()`: This method returns the number of songs processed.
+- `get_total()`: This method returns the total number of songs in the playlist.
+- `get_current_song()`: This method returns the title and artist(s) of the song currently being downloaded.
+- `get_eta()`: This method returns the estimated time remaining for the download to finish, in seconds.
+- `downloader_active()`: Returns `True` if there is an active download in progress, `False` otherwise.
 
 ## Disclaimer
 

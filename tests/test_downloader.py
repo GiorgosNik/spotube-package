@@ -95,7 +95,7 @@ class TestDownloader(unittest.TestCase):
 
         test_downloader.start_downloader(VALID_PLAYLIST)
 
-        while test_downloader.is_working():
+        while test_downloader.downloader_active():
             time.sleep(1)
 
         self.assertTrue(
@@ -111,7 +111,7 @@ class TestDownloader(unittest.TestCase):
         test_downloader.start_downloader(VALID_PLAYLIST)
         test_downloader.stop_downloader()
 
-        while test_downloader.is_working():
+        while test_downloader.downloader_active():
             time.sleep(1)
 
         self.assertTrue(
