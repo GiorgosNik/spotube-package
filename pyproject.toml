@@ -1,35 +1,25 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[project]
-name = "spotube"
-version = "0.0.7"
-authors = [
-  { name="Giorgos Nikolaou", email="giorgosnl17@gmail.com" },
-]
-
-dependencies = [
-"eyed3",
-"lyricsgenius",
-"pydub",
-"pytest",
-"requests",
-"spotipy",
-"tqdm",
-"youtube_search_python",
-"yt_dlp",
-]
-
+[tool.poetry]
+name = "spotube-package"
+version = "0.1.0"
 description = "A Python package to download Spotify playlists locally including the cover art, metadata and lyrics by leveraging the Spotify, YouTube and Genius APIs."
+authors = ["GiorgosNik <giorgosnl17@gmail.com>"]
+license = "Free for non-commercial use"
 readme = "README.md"
-requires-python = ">=3.7"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: Free for non-commercial use",
-    "Operating System :: OS Independent",
-]
+packages = [{include = "spotube_package"}]
 
-[project.urls]
-"Homepage" = "https://github.com/GiorgosNik/spotube-package"
-"Bug Tracker" = "https://github.com/GiorgosNik/spotube-package/issues"
+[tool.poetry.dependencies]
+python = "^3.10"
+eyed3 = "^0.9.7"
+lyricsgenius = "^3.0.1"
+pydub = "^0.25.1"
+pytest = "^7.2.2"
+requests = "^2.28.2"
+spotipy = "^2.22.1"
+tqdm = "^4.65.0"
+youtube-search-python = "^1.6.6"
+yt-dlp = "^2023.3.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
