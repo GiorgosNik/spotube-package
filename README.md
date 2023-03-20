@@ -1,5 +1,11 @@
 # Spotube
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=GiorgosNik_spotube-package&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=GiorgosNik_spotube-package)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=GiorgosNik_spotube-package&metric=coverage)](https://sonarcloud.io/summary/new_code?id=GiorgosNik_spotube-package)
+[![PyPi](https://img.shields.io/badge/-PyPi-blue.svg?logo=pypi&labelColor=555555)](https://img.shields.io/pypi/v/spotube "PyPi")
+[![Downloads](https://static.pepy.tech/badge/spotube)](https://pepy.tech/project/spotube)
+
+
 Spotube is a Python package that allows the user to download local `.mp3` copies of Spotify playlists, including cover art, artist information and lyrics.
 
 ## Description
