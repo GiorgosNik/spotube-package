@@ -1,9 +1,19 @@
 # Spotube
 
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=GiorgosNik_spotube-package&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=GiorgosNik_spotube-package)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=GiorgosNik_spotube-package&metric=coverage)](https://sonarcloud.io/summary/new_code?id=GiorgosNik_spotube-package)
-[![PyPi](https://img.shields.io/badge/-PyPi-blue.svg?logo=pypi&labelColor=555555)](https://img.shields.io/pypi/v/spotube "PyPi")
-[![Downloads](https://static.pepy.tech/badge/spotube)](https://pepy.tech/project/spotube)
+<div align="center">
+
+[![PyPi](https://img.shields.io/badge/-PyPi-blue.svg?logo=pypi&labelColor=555555&style=for-the-badge)](https://pypi.org/project/spotube "PyPi")
+![PyPI - Downloads](https://img.shields.io/pypi/dm/spotube?color=%230f80c0&style=for-the-badge)
+![Sonar Logo](https://img.shields.io/badge/Sonar%20cloud-F3702A?style=for-the-badge&logo=sonarcloud&logoColor=white)
+![Sonar Quality Gate](https://img.shields.io/sonar/quality_gate/GiorgosNik_spotube-package?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge)
+![Sonar Coverage](https://img.shields.io/sonar/coverage/GiorgosNik_spotube-package?label=COVERAGE&server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge)
+![Snyk Logo](https://img.shields.io/badge/Snyk-4C4A73?style=for-the-badge&logo=snyk&logoColor=white)
+[![PyPI - License](https://img.shields.io/pypi/l/spotube?color=%23007ec6&style=for-the-badge)](LICENSE "License")
+![Spotify Logo](https://img.shields.io/badge/Spotify-1ED760?&style=for-the-badge&logo=spotify&logoColor=white)
+![Youtube Logo](https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)
+
+</div>
+
 
 
 Spotube is a Python package that allows the user to download local `.mp3` copies of Spotify playlists, including cover art, artist information and lyrics.
