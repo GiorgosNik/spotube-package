@@ -50,7 +50,9 @@ def set_tags(song_info, genius_obj, directory):
     if audio_file.tag is None:
         audio_file.initTag()
 
-    audio_file.tag.images.set(3, open("cover_photo.jpg", "rb").read(), "image/jpeg")
+    audio_file.tag.images.set(
+        3, open(directory + "/cover_photo.jpg", "rb").read(), "image/jpeg"
+    )
     formatted_artist_string = song_info["artist"].replace(",", ";")
     audio_file.tag.artist = formatted_artist_string
     audio_file.tag.title = song_info["name"]
@@ -65,7 +67,7 @@ def set_tags(song_info, genius_obj, directory):
         pass
 
     audio_file.tag.save()
-    os.remove("./cover_photo.jpg")
+    os.remove(directory + "/cover_photo.jpg")
 
 
 def format_artists(artist_list):
@@ -98,17 +100,12 @@ def get_link(song_info):
     return best_link
 
 
-def download_image(song_info):
+def download_image(song_info, directory):
     # Get the Cover Art
     image_url = song_info["url"]
-    filename = "cover_photo.jpg"
-    image_request = requests.get(image_url, stream=True)
-
-    if image_request.status_code == 200:
-        image_request.raw.decode_content = True
-
-        with open(filename, "wb") as f:
-            shutil.copyfileobj(image_request.raw, f)
+    r = requests.get(image_url)
+    with open(directory + "/cover_photo.jpg", "wb") as f:
+        f.write(r.content)
 
 
 def download_song(given_link, song_info, downloader, directory):
@@ -211,7 +208,7 @@ def download_playlist(playlist_url, tokens, channel, termination_channel, direct
         info_dict = format_song_data(song)
 
         # Download Cover Art, to preview to UI
-        download_image(info_dict)
+        download_image(info_dict, directory)
 
         # Send Message to UI
         send_message(
