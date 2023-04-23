@@ -181,7 +181,9 @@ def format_song_data(song):
     return info_dict
 
 
-def download_playlist(playlist_url, tokens, channel, termination_channel, directory):
+def download_playlist(
+    playlist_url, tokens, channel, termination_channel, directory, display_bar=True
+):
     # Set up the folder for the songs
     if not os.path.isdir(directory):
         os.mkdir(directory)
@@ -190,16 +192,29 @@ def download_playlist(playlist_url, tokens, channel, termination_channel, direct
 
     songs = get_songs(playlist_url, tokens["spotify"])
 
+    if display_bar:
+        file = None
+    else:
+        file = open(os.devnull, "w")
+
     # Set the tqdm progress bar
     playlist_size = len(songs)
     playlist_progress = tqdm(
-        total=playlist_size, desc="Playlist Progress", position=0, leave=False
+        total=playlist_size,
+        desc="Playlist Progress",
+        position=0,
+        leave=False,
+        file=file,
     )
 
     for song in songs:
         # Set song progress bar
         song_progress = tqdm(
-            total=4, desc=song["track"]["name"], position=1, leave=False
+            total=4,
+            desc=song["track"]["name"],
+            position=1,
+            leave=False,
+            file=file,
         )
 
         # Retrieve Formatted Song Data

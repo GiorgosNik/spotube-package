@@ -1,6 +1,6 @@
 import threading
 import queue
-import spotube_package.downloader_utils as utils
+from . import downloader_utils as utils
 import os
 import subprocess
 from zipfile import ZipFile
@@ -13,6 +13,7 @@ class downloader:
         spotify_client_secret,
         genius_api_key,
         directory="./Songs",
+        display_bar=True
     ):
         # Initialise the tracking values
         self.progress = 0
@@ -25,6 +26,7 @@ class downloader:
         self.spotify_client_secret = spotify_client_secret
         self.genius_api_key = genius_api_key
         self.directory = directory
+        self.display_bar = display_bar
 
         # Set the channel that will handle the messages from the worker
         self.channel = queue.Queue()
@@ -36,9 +38,6 @@ class downloader:
         self.tokens = utils.auth_handler(
             self.spotify_client_id, self.spotify_client_secret, self.genius_api_key
         )
-
-        # For testing
-        # utils.download_ffmpeg()
 
         if not utils.ffmpeg_installed():  # pragma: no cover
             os_name = utils.get_os_name()
@@ -57,6 +56,7 @@ class downloader:
                 self.channel,
                 self.termination_channel,
                 self.directory,
+                self.display_bar
             ],
         )
         self.working = True
