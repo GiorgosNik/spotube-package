@@ -345,7 +345,7 @@ def ffmpeg_installed():
                 stderr=subprocess.PIPE,
             ).communicate()[0]
         )
-        if p == "b''":
+        if p == "b''" and not os.path.exists("./ffmpeg"):
             return False
 
     return True
