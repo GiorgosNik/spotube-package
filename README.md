@@ -105,10 +105,10 @@ my_downloaded = set_directory("./Songs")
 
 ### Stopping the Downloader
 
-You can stop the download process using the `stop_downloader` method on a downloader object:
+You can stop the download process using the `cancel_downloader` method on a downloader object:
 
 ```
-my_downloaded = stop_downloader()
+my_downloaded = cancel_downloader()
 ```
 
 This will reset all download information, like the ETA and progress.
