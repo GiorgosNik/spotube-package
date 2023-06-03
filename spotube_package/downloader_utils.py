@@ -114,13 +114,12 @@ def download_song(given_link, song_info, downloader, directory):
     while attempts <= 3:
         try:
             downloader.extract_info(given_link)
-            list_of_files = glob.glob(directory + "/*.mp3")
-            latest_file = max(list_of_files, key=os.path.getctime)
+            default_song_name = "/downloaded_song.mp3"
 
             # Overwrite the file, if it exists
             if os.path.exists(directory + "/" + song_info["name"] + ".mp3"):
                 os.remove(directory + "/" + song_info["name"] + ".mp3")
-            os.rename(latest_file, directory + "/" + song_info["name"] + ".mp3")
+            os.rename(directory + default_song_name, directory + "/" + song_info["name"] + ".mp3")
             return
 
         except Exception as e:  # pragma: no cover
