@@ -5,6 +5,7 @@ import os
 import subprocess
 from zipfile import ZipFile
 import urllib.request
+import shutil
 
 class downloader:
     def __init__(
@@ -27,6 +28,8 @@ class downloader:
         self.genius_api_key = genius_api_key
         self.directory = directory
         self.display_bar = display_bar
+        self.success_counter = 0
+        self.fail_counter = 0
 
         # Set the channel that will handle the messages from the worker
         self.channel = queue.Queue()
@@ -62,7 +65,7 @@ class downloader:
         self.working = True
         self.thread.start()
 
-    def stop_downloader(self):
+    def cancel_downloader(self):
         self.termination_channel.put("EXIT")
 
         # Wait for thread to exit
@@ -77,9 +80,13 @@ class downloader:
         self.thread = None
         self.channel = queue.Queue()
         self.termination_channel = queue.Queue()
+        self.success_counter = 0
+        self.fail_counter = 0
         self.tokens = utils.auth_handler(
             self.spotify_client_id, self.spotify_client_secret, self.genius_api_key
         )
+        if os.path.isdir(self.directory):
+            shutil.rmtree(self.directory)
 
     def validate_playlist_url(self, playlist_url):
         try:
@@ -109,3 +116,11 @@ class downloader:
     def downloader_active(self):
         utils.fetch_messages(self)
         return self.working
+    
+    def get_success_counter(self):
+        utils.fetch_messages(self)
+        return self.success_counter
+    
+    def get_fail_counter(self):
+        utils.fetch_messages(self)
+        return self.fail_counter

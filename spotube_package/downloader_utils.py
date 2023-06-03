@@ -17,8 +17,9 @@ import urllib.request
 from platform import machine
 import tarfile
 import zipfile
+from pathlib import Path
 
-
+COVER_PHOTO = "/cover_photo.jpg"
 FFMPEG_UNIX_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
 FFMPEG_UNIX_ARM = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
 FFMPEG_WINDOWS_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
@@ -51,7 +52,7 @@ def set_tags(song_info, genius_obj, directory):
         audio_file.initTag()
 
     audio_file.tag.images.set(
-        3, open(directory + "/cover_photo.jpg", "rb").read(), "image/jpeg"
+        3, open(directory + COVER_PHOTO, "rb").read(), "image/jpeg"
     )
     formatted_artist_string = song_info["artist"].replace(",", ";")
     audio_file.tag.artist = formatted_artist_string
@@ -67,7 +68,7 @@ def set_tags(song_info, genius_obj, directory):
         pass
 
     audio_file.tag.save()
-    os.remove(directory + "/cover_photo.jpg")
+    os.remove(directory + COVER_PHOTO)
 
 
 def format_artists(artist_list):
@@ -104,7 +105,7 @@ def download_image(song_info, directory):
     # Get the Cover Art
     image_url = song_info["url"]
     r = requests.get(image_url)
-    with open(directory + "/cover_photo.jpg", "wb") as f:
+    with open(directory + COVER_PHOTO, "wb") as f:
         f.write(r.content)
 
 
@@ -185,16 +186,16 @@ def download_playlist(
 ):
     # Set up the folder for the songs
     if not os.path.isdir(directory):
-        os.mkdir(directory)
+        Path(directory).mkdir(parents=True, exist_ok=True)
 
     audio_downloader = create_audio_downloader(directory)
 
     songs = get_songs(playlist_url, tokens["spotify"])
 
     if display_bar:
-        file = None
+        filename = None
     else:
-        file = open(os.devnull, "w")
+        filename = open(os.devnull, "w")
 
     # Set the tqdm progress bar
     playlist_size = len(songs)
@@ -203,8 +204,11 @@ def download_playlist(
         desc="Playlist Progress",
         position=0,
         leave=False,
-        file=file,
+        file=filename,
     )
+
+    success_counter = 0
+    failure_counter = 0
 
     for song in songs:
         # Set song progress bar
@@ -213,7 +217,7 @@ def download_playlist(
             desc=song["track"]["name"],
             position=1,
             leave=False,
-            file=file,
+            file=filename,
         )
 
         # Retrieve Formatted Song Data
@@ -256,8 +260,10 @@ def download_playlist(
                 info_dict["name"] + ": Moving to designated folder"
             )
             song_progress.update(n=1)
+            success_counter += 1
 
         except Exception as e:  # pragma: no cover
+            failure_counter += 1
             print(str(e))
             continue
         song_progress.close()
@@ -267,7 +273,7 @@ def download_playlist(
         send_message(
             channel,
             type="progress",
-            contents=[playlist_progress.n, playlist_progress.total],
+            contents=[playlist_progress.n, playlist_progress.total, success_counter, failure_counter],
         )
 
         elapsed = get_elapsed(playlist_progress)
@@ -372,6 +378,8 @@ def handle_message(downloader, message):
     if message["type"] == "progress":
         downloader.progress = contents[0]
         downloader.total = contents[1]
+        downloader.success_counter = contents[2]
+        downloader.failure_counter = contents[3]
 
     elif message["type"] == "song_title":
         downloader.current_song = contents

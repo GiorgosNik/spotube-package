@@ -103,21 +103,51 @@ class TestDownloader(unittest.TestCase):
             and os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
         )
 
-    def test_stop_downloader(self):
+    def test_cancel_downloader(self):
         test_downloader = downloader(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
         test_downloader.start_downloader(VALID_PLAYLIST)
-        test_downloader.stop_downloader()
+        test_downloader.cancel_downloader()
 
         while test_downloader.downloader_active():
             time.sleep(1)
 
         self.assertTrue(
-            os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
+            not os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
             and not os.path.exists("./Test_Directory/TRAP.mp3")
         )
+
+    def test_get_success_counter(self):
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
+
+        test_downloader.start_downloader(VALID_PLAYLIST)
+        success_counter = test_downloader.get_success_counter()
+        self.assertEqual(success_counter, 0)
+
+        while test_downloader.downloader_active():
+            time.sleep(1)
+
+        success_counter = test_downloader.get_success_counter()
+        self.assertEqual(success_counter, 2)
+
+    def test_get_fail_counter(self):
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        )
+
+        test_downloader.start_downloader(VALID_PLAYLIST)
+        fail_counter = test_downloader.get_fail_counter()
+        self.assertEqual(fail_counter, 0)
+
+        while test_downloader.downloader_active():
+            time.sleep(1)
+
+        fail_counter = test_downloader.get_fail_counter()
+        self.assertEqual(fail_counter, 0)
 
 
 if __name__ == "__main__":
