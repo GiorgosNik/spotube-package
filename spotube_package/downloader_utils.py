@@ -504,6 +504,8 @@ def extract_bin_from_tarball(filename):
         for member in members:
             if member.isreg() and member.name.split(".")[0] == member.name:
                 member.name = os.path.basename(member.name)
+                if os.getcwd() not in  os.path.realpath(member.name):
+                    raise RuntimeError("Invalid tarball")
                 archive.extract(member.name, ".")
             extraction_bar.update(n=1)
     os.remove(filename)
