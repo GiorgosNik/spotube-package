@@ -103,6 +103,21 @@ class TestDownloader(unittest.TestCase):
             and os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
         )
 
+    def test_different_path(self):
+        test_downloader = downloader(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory/TEST"
+        )
+
+        test_downloader.start_downloader(VALID_PLAYLIST)
+
+        while test_downloader.downloader_active():
+            time.sleep(1)
+
+        self.assertTrue(
+            os.path.exists("./Test_Directory/TEST/TRAP.mp3")
+            and os.path.exists("./Test_Directory/TEST/C'est pas d'ma faute c'est l'mood.mp3")
+        )
+
     def test_cancel_downloader(self):
         test_downloader = downloader(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
