@@ -1,10 +1,8 @@
 import unittest
 import pytest
-import time
 import os
 import shutil
-from spotube_package.downloader_utils import download_ffmpeg, get_os_name
-
+from spotube_package.dependency_handler import DependencyHandler
 # Testing API KEYS
 
 
@@ -19,28 +17,20 @@ def run_around_tests():
 
 class TestUtils(unittest.TestCase):
     def test_download_ffmpeg(self):
-        download_ffmpeg("nt")
+        DependencyHandler.download_ffmpeg("nt")
         self.assertTrue(
             os.path.exists("./ffmpeg.exe")
             and os.path.exists("./ffprobe.exe")
             and os.path.exists("./ffplay.exe")
         )
-        download_ffmpeg("posix")
+        DependencyHandler.download_ffmpeg("posix")
         self.assertTrue(
             os.path.exists("./ffmpeg")
             and os.path.exists("./ffprobe")
             and os.path.exists("./ffplay")
         )
         with pytest.raises(ValueError):
-            download_ffmpeg("This will raise and exception")
-
-    def test_get_os_name(self):
-        os_name = get_os_name()
-        if os.name == "nt":
-            self.assertEqual(os_name, "nt")
-        if os.name == "posix":
-            self.assertEqual(os_name, "posix")
-
+            DependencyHandler.download_ffmpeg("This will raise an exception")
 
 if __name__ == "__main__":
     unittest.main()

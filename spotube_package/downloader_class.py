@@ -2,20 +2,20 @@ import threading
 import queue
 from . import downloader_utils as utils
 import os
-import subprocess
-from zipfile import ZipFile
-import urllib.request
 import shutil
+from spotube_package.authenticator import Authenticator
+from spotube_package.dependency_handler import DependencyHandler
 
-class downloader:
+class Downloader:
     def __init__(
         self,
-        spotify_client_id,
-        spotify_client_secret,
-        genius_api_key,
-        directory="./Songs",
-        display_bar=True
-    ):
+        spotify_client_id: str,
+        spotify_client_secret: str,
+        genius_api_key: str,
+        directory: str = "./Songs",
+        display_bar: bool = True,
+    ) -> None:
+        
         # Initialise the tracking values
         self.progress = 0
         self.working = False
@@ -37,14 +37,12 @@ class downloader:
         # Set the channel that will handle the messages from the worker
         self.termination_channel = queue.Queue()
 
-        # Perform authentication for LyricsGenius and Spotify APIs
-        self.tokens = utils.auth_handler(
-            self.spotify_client_id, self.spotify_client_secret, self.genius_api_key
+        self.authenticator = Authenticator(
+            spotify_client_id, spotify_client_secret, genius_api_key
         )
 
-        if not utils.ffmpeg_installed():  # pragma: no cover
-            os_name = utils.get_os_name()
-            utils.download_ffmpeg(os_type = os_name)
+        if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
+            DependencyHandler.download_ffmpeg(os_type=os.name)
 
     def set_directory(self, directory):
         self.directory = directory
@@ -55,11 +53,11 @@ class downloader:
             target=utils.download_playlist,
             args=[
                 link,
-                self.tokens,
+                self.authenticator,
                 self.channel,
                 self.termination_channel,
                 self.directory,
-                self.display_bar
+                self.display_bar,
             ],
         )
         self.working = True
@@ -82,15 +80,13 @@ class downloader:
         self.termination_channel = queue.Queue()
         self.success_counter = 0
         self.fail_counter = 0
-        self.tokens = utils.auth_handler(
-            self.spotify_client_id, self.spotify_client_secret, self.genius_api_key
-        )
+
         if os.path.isdir(self.directory):
             shutil.rmtree(self.directory)
 
     def validate_playlist_url(self, playlist_url):
         try:
-            self.tokens["spotify"].playlist_items(
+            self.authenticator.spotify_auth.playlist_items(
                 playlist_url, additional_types=("track",)
             )
         except Exception:
@@ -116,11 +112,11 @@ class downloader:
     def downloader_active(self):
         utils.fetch_messages(self)
         return self.working
-    
+
     def get_success_counter(self):
         utils.fetch_messages(self)
         return self.success_counter
-    
+
     def get_fail_counter(self):
         utils.fetch_messages(self)
         return self.fail_counter
