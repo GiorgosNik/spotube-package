@@ -1,1 +1,1 @@
-from .downloader_class import Downloader
+from .download_manager import DownloadManager

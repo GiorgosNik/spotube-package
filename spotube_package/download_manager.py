@@ -6,7 +6,7 @@ import shutil
 from spotube_package.authenticator import Authenticator
 from spotube_package.dependency_handler import DependencyHandler
 
-class Downloader:
+class DownloadManager:
     def __init__(
         self,
         spotify_client_id: str,
@@ -44,10 +44,10 @@ class Downloader:
         if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
             DependencyHandler.download_ffmpeg(os_type=os.name)
 
-    def set_directory(self, directory):
+    def set_directory(self, directory: str) -> None:
         self.directory = directory
 
-    def start_downloader(self, link):
+    def start_downloader(self, link: str) -> None:
         # Create a new thread to handle the download
         self.thread = threading.Thread(
             target=utils.download_playlist,
@@ -63,7 +63,7 @@ class Downloader:
         self.working = True
         self.thread.start()
 
-    def cancel_downloader(self):
+    def cancel_downloader(self) -> None:
         self.termination_channel.put("EXIT")
 
         # Wait for thread to exit
@@ -84,7 +84,7 @@ class Downloader:
         if os.path.isdir(self.directory):
             shutil.rmtree(self.directory)
 
-    def validate_playlist_url(self, playlist_url):
+    def validate_playlist_url(self, playlist_url:str) -> bool:
         try:
             self.authenticator.spotify_auth.playlist_items(
                 playlist_url, additional_types=("track",)
@@ -93,30 +93,55 @@ class Downloader:
             return False
         return True
 
-    def get_progress(self):
-        utils.fetch_messages(self)
+    def get_progress(self) -> int:
+        self.__fetch_messages()
         return self.progress
 
-    def get_total(self):
-        utils.fetch_messages(self)
+    def get_total(self) -> int:
+        self.__fetch_messages()
         return self.total
 
-    def get_current_song(self):
-        utils.fetch_messages(self)
+    def get_current_song(self) -> str:
+        self.__fetch_messages()
         return self.current_song
 
-    def get_eta(self):
-        utils.fetch_messages(self)
+    def get_eta(self) -> int:
+        self.__fetch_messages()
         return self.eta
 
-    def downloader_active(self):
-        utils.fetch_messages(self)
+    def downloader_active(self) -> bool:
+        self.__fetch_messages()
         return self.working
 
-    def get_success_counter(self):
-        utils.fetch_messages(self)
+    def get_success_counter(self) -> int:
+        self.__fetch_messages()
         return self.success_counter
 
-    def get_fail_counter(self):
-        utils.fetch_messages(self)
+    def get_fail_counter(self) -> int:
+        self.__fetch_messages()
         return self.fail_counter
+    
+    def __fetch_messages(self) -> None:
+        if not self.channel.empty():
+            message: str = self.channel.get()
+            self.__handle_message(message)
+
+    # Save the state of the worker thread based on the message
+    def __handle_message(self, message: [str]) -> None:
+        contents = message["contents"]
+
+        if message["type"] == "progress":
+            self.progress = contents[0]
+            self.total = contents[1]
+            self.success_counter = contents[2]
+            self.failure_counter = contents[3]
+
+        elif message["type"] == "song_title":
+            self.current_song = contents
+
+        elif message["type"] == "eta_update":
+            self.eta = contents[1]
+
+        elif message["type"] == "download_complete":
+            self.working = False
+            self.progress = self.total

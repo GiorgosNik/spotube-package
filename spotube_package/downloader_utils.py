@@ -317,34 +317,6 @@ def create_audio_downloader(directory: str) -> YoutubeDL:
         )
     return audio_downloader
 
-
-# Save the state of the worker thread based on the message
-def handle_message(downloader, message: [str]):
-    contents = message["contents"]
-
-    if message["type"] == "progress":
-        downloader.progress = contents[0]
-        downloader.total = contents[1]
-        downloader.success_counter = contents[2]
-        downloader.failure_counter = contents[3]
-
-    elif message["type"] == "song_title":
-        downloader.current_song = contents
-
-    elif message["type"] == "eta_update":
-        downloader.eta = contents[1]
-
-    elif message["type"] == "download_complete":
-        downloader.working = False
-        downloader.progress = downloader.total
-
-
-def fetch_messages(downloader) -> None:
-    if not downloader.channel.empty():
-        message: str = downloader.channel.get()
-        handle_message(downloader, message)
-
-
 def match_target_amplitude(sound: AudioSegment, target_dbfs: int) -> AudioSegment:
     change_in_dbfs = target_dbfs - sound.dBFS
     return sound.apply_gain(change_in_dbfs)
