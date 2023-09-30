@@ -19,7 +19,7 @@ class DownloadManager:
         # Initialise the tracking values
         self.progress = 0
         self.working = False
-        self.total = None
+        self.total = 0
         self.current_song = None
         self.eta = None
         self.thread = None
