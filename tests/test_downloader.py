@@ -3,7 +3,7 @@ import pytest
 import time
 import os
 import shutil
-from spotube_package.downloader_class import downloader
+from spotube_package.download_manager import DownloadManager
 # Testing API KEYS
 SPOTIFY_ID = "ff55dcadd44e4cb0819ebe5be80ab687"
 SPOTIFY_SECRET = "5539f7392ae94dd5b3dfc1d57381303a"
@@ -33,20 +33,20 @@ def run_around_tests():
 
 class TestDownloader(unittest.TestCase):
     def test_constructor(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
         self.assertNotEqual(test_downloader, None)
 
     def test_set_directory(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
         test_downloader.set_directory("./test")
         self.assertEqual(test_downloader.directory, "./test")
 
     def test_validate_playlist_url(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
@@ -57,7 +57,7 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(playlist_validity, False)
 
     def test_get_total(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
@@ -65,7 +65,7 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(total, None)
 
     def test_get_progress(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
@@ -73,7 +73,7 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(progress, 0)
 
     def test_get_current_song(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
@@ -81,7 +81,7 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(current_song, None)
 
     def test_get_eta(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
@@ -89,7 +89,7 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(eta, None)
 
     def test_start_downloader(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
@@ -104,7 +104,7 @@ class TestDownloader(unittest.TestCase):
         )
 
     def test_different_path(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory/TEST"
         )
 
@@ -119,7 +119,7 @@ class TestDownloader(unittest.TestCase):
         )
 
     def test_cancel_downloader(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
@@ -135,7 +135,7 @@ class TestDownloader(unittest.TestCase):
         )
 
     def test_get_success_counter(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
@@ -150,7 +150,7 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(success_counter, 2)
 
     def test_get_fail_counter(self):
-        test_downloader = downloader(
+        test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 

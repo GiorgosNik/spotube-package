@@ -1,30 +1,15 @@
 import os
-import glob
 from youtubesearchpython import VideosSearch
 import eyed3
 import requests
-import shutil
 from tqdm import tqdm
-import spotipy
 from yt_dlp import YoutubeDL
 import os
-from spotipy.oauth2 import SpotifyClientCredentials
-import lyricsgenius
-from zipfile import ZipFile
-import subprocess
 from pydub import AudioSegment
-import urllib.request
-from platform import machine
-import tarfile
-import zipfile
 from pathlib import Path
+from spotube_package.dependency_handler import DependencyHandler
 
 COVER_PHOTO = "/cover_photo.jpg"
-FFMPEG_UNIX_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
-FFMPEG_UNIX_ARM = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
-FFMPEG_WINDOWS_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-FFMPEG_WINDOWS_X86 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip"
-
 
 def get_lyrics(name_search, artist_search, genius_obj):
     sep1 = "ft."
@@ -182,7 +167,7 @@ def format_song_data(song):
 
 
 def download_playlist(
-    playlist_url, tokens, channel, termination_channel, directory, display_bar=True
+    playlist_url, authenticator, channel, termination_channel, directory, display_bar=True
 ):
     # Set up the folder for the songs
     if not os.path.isdir(directory):
@@ -190,7 +175,7 @@ def download_playlist(
 
     audio_downloader = create_audio_downloader(directory)
 
-    songs = get_songs(playlist_url, tokens["spotify"])
+    songs = get_songs(playlist_url, authenticator.spotify_auth)
 
     if display_bar:
         filename = None
@@ -253,7 +238,7 @@ def download_playlist(
             # Edit the ID3 Tags
             song_progress.set_description(info_dict["name"] + ": Setting Tags")
             song_progress.update(n=1)
-            set_tags(info_dict, tokens["genius"], directory)
+            set_tags(info_dict, authenticator.genius_auth, directory)
 
             # Move to the designated folder
             song_progress.set_description(
@@ -292,24 +277,10 @@ def download_playlist(
 
     send_message(channel, type="download_complete", contents=[])
 
-
-def auth_handler(client_id, client_secret, genius):
-    genius_auth = lyricsgenius.Genius(
-        genius,
-        verbose=False,
-    )
-    auth_manager = SpotifyClientCredentials(
-        client_id=client_id, client_secret=client_secret
-    )
-    spotify_auth = spotipy.Spotify(auth_manager=auth_manager)
-
-    return {"genius": genius_auth, "spotify": spotify_auth}
-
-
 # Create downloader object, pass options
-def create_audio_downloader(directory):
-    if not ffmpeg_installed():
-        audio_downloader = YoutubeDL(
+def create_audio_downloader(directory: str) -> YoutubeDL:
+    if not DependencyHandler.ffmpeg_installed():
+        audio_downloader: YoutubeDL = YoutubeDL(
             {
                 "format": "bestaudio",
                 "ffmpeg_location": ".",
@@ -328,7 +299,7 @@ def create_audio_downloader(directory):
         )
 
     else:
-        audio_downloader = YoutubeDL(
+        audio_downloader: YoutubeDL = YoutubeDL(
             {
                 "format": "bestaudio",
                 "postprocessors": [
@@ -346,182 +317,29 @@ def create_audio_downloader(directory):
         )
     return audio_downloader
 
-
-# Return True if ffmpeg is installed, False otherwise
-def ffmpeg_installed():
-    if os.name == "nt":
-        # Windows
-        if not os.path.exists("./ffmpeg.exe"):
-            return False
-
-    elif os.name == "posix":
-        # Unix
-        # Check if ffmpeg is installed
-        p = str(
-            subprocess.Popen(
-                "which ffmpeg",
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()[0]
-        )
-        if p == "b''" and not os.path.exists("./ffmpeg"):
-            return False
-
-    return True
-
-
-# Save the state of the worker thread based on the message
-def handle_message(downloader, message):
-    contents = message["contents"]
-
-    if message["type"] == "progress":
-        downloader.progress = contents[0]
-        downloader.total = contents[1]
-        downloader.success_counter = contents[2]
-        downloader.failure_counter = contents[3]
-
-    elif message["type"] == "song_title":
-        downloader.current_song = contents
-
-    elif message["type"] == "eta_update":
-        downloader.eta = contents[1]
-
-    elif message["type"] == "download_complete":
-        downloader.working = False
-        downloader.progress = downloader.total
-
-
-def fetch_messages(downloader):
-    if not downloader.channel.empty():
-        message = downloader.channel.get()
-        handle_message(downloader, message)
-
-
-def match_target_amplitude(sound, target_dbfs):
+def match_target_amplitude(sound: AudioSegment, target_dbfs: int) -> AudioSegment:
     change_in_dbfs = target_dbfs - sound.dBFS
     return sound.apply_gain(change_in_dbfs)
 
 
-def normalize_volume_levels(directory):
-    if not ffmpeg_installed():  # pragma: no cover
+def normalize_volume_levels(directory: str) -> None:
+    if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
         print("WARNING: ffmpeg not found in PATH, volume normalization skipped.")
-        return ()
+        return
 
     if not os.path.isdir(directory):
         raise ValueError("Invalid directory")
 
-    abs_path = os.path.abspath(directory)
+    abs_path: str = os.path.abspath(directory)
 
-    files = os.listdir(directory)
+    files:[str] = os.listdir(directory)
 
-    normalization_progress = tqdm(
+    normalization_progress: tqdm = tqdm(
         total=len(files), desc="Normalizing Sound", position=0, leave=False
     )
     for file in files:
         if file.endswith(".mp3"):
-            sound = AudioSegment.from_file(abs_path + "/" + file, "mp3")
-            normalized_sound = match_target_amplitude(sound, -14.0)
+            sound: AudioSegment = AudioSegment.from_file(abs_path + "/" + file, "mp3")
+            normalized_sound: AudioSegment = match_target_amplitude(sound, -14.0)
             normalized_sound.export(abs_path + "/" + file, format="mp3")
             normalization_progress.update(n=1)
-
-
-def select_ffmpeg_link(os_type=None):
-    if os_type is not None and os_type != "nt" and os_type != "posix":
-        raise ValueError(
-            "Invalid OS provided.\nUse:\n 'nt' for Windows, 'posix' of Unix"
-        )
-
-    if os_type is None:
-        os_type = os.name
-
-    architecture = machine().lower()
-
-    if os_type == "nt" and architecture.find("64"):  # pragma: no cover
-        url = FFMPEG_WINDOWS_X64
-    elif os_type == "nt" and architecture.find("86"):  # pragma: no cover
-        url = FFMPEG_WINDOWS_X86
-    elif os_type == "posix" and architecture.find("arm"):  # pragma: no cover
-        url = FFMPEG_UNIX_ARM
-    elif os_type == "posix" and architecture == "x64":  # pragma: no cover
-        url = FFMPEG_UNIX_X64
-    else:  # pragma: no cover
-        raise RuntimeError("Unknown OS")
-
-    return url
-
-
-def get_os_name():
-    return os.name
-
-
-def download_ffmpeg(os_type=None):
-    if os_type is not None and os_type != "nt" and os_type != "posix":
-        raise ValueError(
-            "Invalid OS provided.\nUse:\n 'nt' for Windows, 'posix' of Unix"
-        )
-
-    if os_type is None:
-        os_type = os.name
-
-    url = select_ffmpeg_link(os_type)
-
-    filename = url.split("/")[-1]
-
-    with DownloadProgressBar(
-        unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]
-    ) as t:
-        urllib.request.urlretrieve(url, filename=filename, reporthook=t.update_to)
-
-    if os_type is None:
-        os_type = os.name
-
-    if os_type == "nt":
-        extract_exe_from_zip(filename)
-
-    elif os_type == "posix":
-        extract_bin_from_tarball(filename)
-
-
-def extract_exe_from_zip(filename):
-    with zipfile.ZipFile(filename, "r") as archive:
-        files = archive.infolist()
-        for file in files:
-            if file.is_dir():
-                continue
-            if file.filename.endswith(".exe"):
-                file.filename = os.path.basename(file.filename)
-                archive.extract(file, "./")
-    os.remove(filename)
-
-
-def extract_bin_from_tarball(filename):
-    with tarfile.open(filename) as archive:
-        members = archive.getmembers()
-        extraction_bar = tqdm(
-            total=len(members), desc="Extracting files", position=1, leave=False
-        )
-        for member in members:
-            if member.isreg() and member.name.split(".")[0] == member.name:
-                member.name = os.path.basename(member.name)
-                if os.getcwd() not in  os.path.realpath(member.name):
-                    raise RuntimeError("Invalid tarball")
-                archive.extract(member.name, ".")
-            extraction_bar.update(n=1)
-    os.remove(filename)
-
-
-class DownloadProgressBar(tqdm):
-    def update_to(self, b=1, bsize=1, tsize=None):
-        if tsize is not None:
-            self.total = tsize
-        self.update(b * bsize - self.n)
-
-    @staticmethod
-    def download_url(url, output_path):
-        with DownloadProgressBar(
-            unit="B", position=0, leave=False, unit_scale=True, desc=url.split("/")[-1]
-        ) as t:
-            urllib.request.urlretrieve(
-                url, filename=output_path, reporthook=t.update_to
-            )
