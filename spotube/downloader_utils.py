@@ -7,7 +7,7 @@ from yt_dlp import YoutubeDL
 import os
 from pydub import AudioSegment
 from pathlib import Path
-from spotube_package.dependency_handler import DependencyHandler
+from spotube.dependency_handler import DependencyHandler
 
 COVER_PHOTO = "/cover_photo.jpg"
 

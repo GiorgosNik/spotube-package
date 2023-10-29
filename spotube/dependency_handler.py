@@ -6,7 +6,7 @@ import urllib.request
 from platform import machine
 import tarfile
 import zipfile
-from spotube_package.progress_bar import ProgressBar
+from spotube.progress_bar import ProgressBar
 
 FFMPEG_UNIX_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
 FFMPEG_UNIX_ARM = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz"

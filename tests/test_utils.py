@@ -2,7 +2,7 @@ import unittest
 import pytest
 import os
 import shutil
-from spotube_package.dependency_handler import DependencyHandler
+from spotube.dependency_handler import DependencyHandler
 # Testing API KEYS
 
 

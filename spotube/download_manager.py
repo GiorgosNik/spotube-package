@@ -3,8 +3,8 @@ import queue
 from . import downloader_utils as utils
 import os
 import shutil
-from spotube_package.authenticator import Authenticator
-from spotube_package.dependency_handler import DependencyHandler
+from spotube.authenticator import Authenticator
+from spotube.dependency_handler import DependencyHandler
 
 class DownloadManager:
     def __init__(

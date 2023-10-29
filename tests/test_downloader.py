@@ -3,7 +3,7 @@ import pytest
 import time
 import os
 import shutil
-from spotube_package.download_manager import DownloadManager
+from spotube.download_manager import DownloadManager
 # Testing API KEYS
 SPOTIFY_ID = "ff55dcadd44e4cb0819ebe5be80ab687"
 SPOTIFY_SECRET = "5539f7392ae94dd5b3dfc1d57381303a"
