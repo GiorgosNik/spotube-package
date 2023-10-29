@@ -62,7 +62,7 @@ class TestDownloader(unittest.TestCase):
         )
 
         total = test_downloader.get_total()
-        self.assertEqual(total, None)
+        self.assertEqual(total, 0)
 
     def test_get_progress(self):
         test_downloader = DownloadManager(
