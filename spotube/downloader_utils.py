@@ -167,7 +167,7 @@ def format_song_data(song):
 
 
 def download_playlist(
-    playlist_url, authenticator, channel, termination_channel, directory, display_bar=True
+    playlist_url, authenticator, channel, termination_channel, directory, display_bar=True, normalize_sound=True
 ):
     # Set up the folder for the songs
     if not os.path.isdir(directory):
@@ -271,7 +271,8 @@ def download_playlist(
             if message == "EXIT":
                 return
 
-    normalize_volume_levels(directory)
+    if normalize_sound:
+        normalize_volume_levels(directory)
 
     playlist_progress.close()
 
