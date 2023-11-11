@@ -14,6 +14,7 @@ class DownloadManager:
         genius_api_key: str,
         directory: str = "./Songs",
         display_bar: bool = True,
+        normalize_sound: bool = True,
     ) -> None:
         
         # Initialise the tracking values
@@ -28,6 +29,7 @@ class DownloadManager:
         self.genius_api_key = genius_api_key
         self.directory = directory
         self.display_bar = display_bar
+        self.normalize_sound = normalize_sound
         self.success_counter = 0
         self.fail_counter = 0
 
@@ -58,6 +60,7 @@ class DownloadManager:
                 self.termination_channel,
                 self.directory,
                 self.display_bar,
+                self.normalize_sound
             ],
         )
         self.working = True
