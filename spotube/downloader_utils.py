@@ -167,7 +167,7 @@ def format_song_data(song):
 
 
 def download_playlist(
-    playlist_url, authenticator, channel, termination_channel, directory, display_bar=True, normalize_sound=True
+    playlist_url, authenticator, channel, termination_channel, directory, display_bar = True, normalize_sound = True, song_number_limit = 0
 ):
     # Set up the folder for the songs
     if not os.path.isdir(directory):
@@ -176,6 +176,10 @@ def download_playlist(
     audio_downloader = create_audio_downloader(directory)
 
     songs = get_songs(playlist_url, authenticator.spotify_auth)
+
+    # Limit the number of songs to download
+    if song_number_limit > 0:
+        songs = songs[:song_number_limit]
 
     if display_bar:
         filename = None
