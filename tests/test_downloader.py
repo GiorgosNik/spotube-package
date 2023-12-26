@@ -164,6 +164,18 @@ class TestDownloader(unittest.TestCase):
         fail_counter = test_downloader.get_fail_counter()
         self.assertEqual(fail_counter, 0)
 
+    def test_song_number_limit(self):
+        test_downloader = DownloadManager(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory", song_number_limit = 1
+        )
+
+        test_downloader.start_downloader(VALID_PLAYLIST)
+
+        while test_downloader.downloader_active():
+            time.sleep(1)
+
+        total_counter = test_downloader.get_total()
+        self.assertEqual(total_counter, 1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,7 @@ class DownloadManager:
         directory: str = "./Songs",
         display_bar: bool = True,
         normalize_sound: bool = True,
+        song_number_limit: int = 0
     ) -> None:
         
         # Initialise the tracking values
@@ -32,6 +33,7 @@ class DownloadManager:
         self.normalize_sound = normalize_sound
         self.success_counter = 0
         self.fail_counter = 0
+        self.song_number_limit = song_number_limit
 
         # Set the channel that will handle the messages from the worker
         self.channel = queue.Queue()
@@ -60,7 +62,8 @@ class DownloadManager:
                 self.termination_channel,
                 self.directory,
                 self.display_bar,
-                self.normalize_sound
+                self.normalize_sound,
+                self.song_number_limit
             ],
         )
         self.working = True
