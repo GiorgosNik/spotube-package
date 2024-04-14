@@ -23,7 +23,7 @@ h11==0.14.0
 html5lib==1.1
 httpcore==0.17.0
 httpx==0.24.0
-idna==3.4
+idna==3.7
 importlib-metadata==6.6.0
 iniconfig==2.0.0
 installer==0.7.0
@@ -72,5 +72,5 @@ virtualenv==20.21.1
 webencodings==0.5.1
 websockets==11.0.2
 youtube-search-python==1.6.6
-yt-dlp>=2023.9.24
+yt-dlp>=2024.4.9
 zipp==3.15.0
