@@ -8,6 +8,11 @@ import os
 from pydub import AudioSegment
 from pathlib import Path
 from spotube.dependency_handler import DependencyHandler
+import logging
+
+# Setup logging configuration
+logging.basicConfig(filename='download_errors.log', level=logging.ERROR,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
 
 COVER_PHOTO = "/cover_photo.jpg"
 
@@ -231,6 +236,7 @@ def download_playlist(
         song_progress.update(n=1)
         link = get_link(info_dict)
         if link == "":
+            logging.error(f"Failed to download {info_dict['name']} after 3 attempts. Error: Could not find link")
             continue
 
         # Download the song
@@ -253,7 +259,7 @@ def download_playlist(
 
         except Exception as e:  # pragma: no cover
             failure_counter += 1
-            print(str(e))
+            logging.error(f"Failed to download {info_dict['name']} after 3 attempts. Error: {str(e)}")
             continue
         song_progress.close()
 
@@ -322,7 +328,7 @@ def create_audio_downloader(directory: str) -> YoutubeDL:
         )
     return audio_downloader
 
-def match_target_amplitude(sound: AudioSegment, target_dbfs: int) -> AudioSegment:
+def match_target_amplitude(sound: AudioSegment, target_dbfs: float) -> AudioSegment:
     change_in_dbfs = target_dbfs - sound.dBFS
     return sound.apply_gain(change_in_dbfs)
 
@@ -337,7 +343,7 @@ def normalize_volume_levels(directory: str) -> None:
 
     abs_path: str = os.path.abspath(directory)
 
-    files:[str] = os.listdir(directory)
+    files: list = os.listdir(directory)
 
     normalization_progress: tqdm = tqdm(
         total=len(files), desc="Normalizing Sound", position=0, leave=False

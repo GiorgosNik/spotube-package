@@ -133,8 +133,13 @@ class DownloadManager:
             self.__handle_message(message)
 
     # Save the state of the worker thread based on the message
-    def __handle_message(self, message: [str]) -> None:
-        contents = message["contents"]
+    from typing import List
+
+    def __handle_message(self, message: List[str]) -> None:
+        if isinstance(message, dict) and "contents" in message:
+            contents = message["contents"]
+        else:
+            return
 
         if message["type"] == "progress":
             self.progress = contents[0]
