@@ -2,7 +2,9 @@ import unittest
 import pytest
 import time
 import os
+import contextlib
 import shutil
+import io
 from spotube.download_manager import DownloadManager
 # Testing API KEYS
 SPOTIFY_ID = "ff55dcadd44e4cb0819ebe5be80ab687"
@@ -36,7 +38,7 @@ class TestDownloader(unittest.TestCase):
         test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
-        self.assertIsNone(test_downloader)
+        self.assertIsNotNone(test_downloader)
 
     def test_set_directory(self):
         test_downloader = DownloadManager(
@@ -103,25 +105,30 @@ class TestDownloader(unittest.TestCase):
             and os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
         )
 
-    def test_different_path(self, capsys):
+    def test_different_path(self):
         test_downloader = DownloadManager(
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory/TEST"
         )
 
-        test_downloader.start_downloader(VALID_PLAYLIST)
+         # Capture stdout output in a StringIO buffer
+        f = io.StringIO()
+        with contextlib.redirect_stdout(f):
+            test_downloader.start_downloader(VALID_PLAYLIST)
+            while test_downloader.downloader_active():
+                time.sleep(1)
+        
+        # Get the stdout contents
+        output = f.getvalue()
 
-        while test_downloader.downloader_active():
-            time.sleep(1)
-
-        # Capture the stdout and stderr
-        captured = capsys.readouterr()
-        # Check if the specific text is in the captured stdout
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in captured.out:
-            pytest.xfail("Test passed due to expected message in stdout")
+        # Check if the specific message is in the captured output
+        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+            self.skipTest("Test passed due to expected message in stdout")
         else:
-            # Perform your regular assertions if the message is not present
-            assert os.path.exists("./Test_Directory/TEST/TRAP.mp3")
-            assert os.path.exists("./Test_Directory/TEST/C'est pas d'ma faute c'est l'mood.mp3")
+            # Perform regular assertions
+            self.assertTrue(
+                os.path.exists("./Test_Directory/TEST/TRAP.mp3") and
+                os.path.exists("./Test_Directory/TEST/C'est pas d'ma faute c'est l'mood.mp3")
+            )
 
     def test_cancel_downloader(self):
         test_downloader = DownloadManager(
