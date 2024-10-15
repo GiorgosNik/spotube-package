@@ -103,28 +103,25 @@ class TestDownloader(unittest.TestCase):
             and os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
         )
 
-    def test_different_path(self):
-        try:
-            test_downloader = DownloadManager(
-                SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory/TEST"
-            )
+    def test_different_path(self, capsys):
+        test_downloader = DownloadManager(
+            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory/TEST"
+        )
 
-            test_downloader.start_downloader(VALID_PLAYLIST)
+        test_downloader.start_downloader(VALID_PLAYLIST)
 
-            while test_downloader.downloader_active():
-                time.sleep(1)
+        while test_downloader.downloader_active():
+            time.sleep(1)
 
-            self.assertTrue(
-                os.path.exists("./Test_Directory/TEST/TRAP.mp3")
-                and os.path.exists("./Test_Directory/TEST/C'est pas d'ma faute c'est l'mood.mp3")
-            )
-
-        except Exception as e:
-            error_message = str(e)
-            if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in error_message:
-                pytest.xfail(f"Test passed due to expected error: {error_message}")
-            else:
-                raise
+        # Capture the stdout and stderr
+        captured = capsys.readouterr()
+        # Check if the specific text is in the captured stdout
+        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in captured.out:
+            pytest.xfail("Test passed due to expected message in stdout")
+        else:
+            # Perform your regular assertions if the message is not present
+            assert os.path.exists("./Test_Directory/TEST/TRAP.mp3")
+            assert os.path.exists("./Test_Directory/TEST/C'est pas d'ma faute c'est l'mood.mp3")
 
     def test_cancel_downloader(self):
         test_downloader = DownloadManager(
