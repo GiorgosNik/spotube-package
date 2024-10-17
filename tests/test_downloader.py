@@ -95,19 +95,16 @@ class TestDownloader(unittest.TestCase):
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
-        # Capture stdout output in a StringIO buffer
-        f = io.StringIO()
-        with contextlib.redirect_stdout(f):
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
             test_downloader.start_downloader(VALID_PLAYLIST)
 
             while test_downloader.downloader_active():
                 time.sleep(1)
 
-        # Get the stdout contents
-        output = f.getvalue()
-
         # Check if the specific message is in the captured output
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
             self.skipTest("Test passed due to expected message in stdout")
         else:
             self.assertTrue(
@@ -121,17 +118,15 @@ class TestDownloader(unittest.TestCase):
         )
 
         # Capture stdout output in a StringIO buffer
-        f = io.StringIO()
-        with contextlib.redirect_stdout(f):
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
             test_downloader.start_downloader(VALID_PLAYLIST)
             while test_downloader.downloader_active():
                 time.sleep(1)
         
-        # Get the stdout contents
-        output = f.getvalue()
-
         # Check if the specific message is in the captured output
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
             self.skipTest("Test passed due to expected message in stdout")
         else:
             # Perform regular assertions
@@ -161,8 +156,9 @@ class TestDownloader(unittest.TestCase):
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
         )
 
-        f = io.StringIO()
-        with contextlib.redirect_stdout(f):
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
             test_downloader.start_downloader(VALID_PLAYLIST)
             success_counter = test_downloader.get_success_counter()
             self.assertEqual(success_counter, 0)
@@ -170,11 +166,8 @@ class TestDownloader(unittest.TestCase):
             while test_downloader.downloader_active():
                 time.sleep(1)
 
-        # Get the stdout contents
-        output = f.getvalue()
-
         # Check if the specific message is in the captured output
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
             self.skipTest("Test passed due to expected message in stdout")
         else:
             # Perform regular assertions
@@ -201,18 +194,16 @@ class TestDownloader(unittest.TestCase):
             SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory", song_number_limit = 1
         )
 
-        f = io.StringIO()
-        with contextlib.redirect_stdout(f):
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
             test_downloader.start_downloader(VALID_PLAYLIST)
 
             while test_downloader.downloader_active():
                 time.sleep(1)
 
-        # Get the stdout contents
-        output = f.getvalue()
-
         # Check if the specific message is in the captured output
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
             self.skipTest("Test passed due to expected message in stdout")
         else:
             total_counter = test_downloader.get_total()
