@@ -285,7 +285,8 @@ def download_playlist(
             try:
                 download_song(link, info_dict, audio_downloader, directory)
             except RateLimiterException as e:
-                logging.error(f"TRate limiter error when downloading {info_dict['name']}")
+                logging.error(f"Rate limiter error when downloading {info_dict['name']}")
+                print(f"Rate limiter error when downloading {info_dict['name']}")
                 audio_downloader = create_audio_downloader(directory)
                 download_song(link, info_dict, audio_downloader, directory)
 

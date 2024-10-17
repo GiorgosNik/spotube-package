@@ -107,7 +107,7 @@ class TestDownloader(unittest.TestCase):
         output = f.getvalue()
 
         # Check if the specific message is in the captured output
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+        if "Rate limiter error when downloading" in output:
             self.skipTest("Test passed due to expected message in stdout")
         else:
             self.assertTrue(
@@ -131,7 +131,7 @@ class TestDownloader(unittest.TestCase):
         output = f.getvalue()
 
         # Check if the specific message is in the captured output
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+        if "Rate limiter error when downloading" in output:
             self.skipTest("Test passed due to expected message in stdout")
         else:
             # Perform regular assertions
@@ -174,7 +174,7 @@ class TestDownloader(unittest.TestCase):
         output = f.getvalue()
 
         # Check if the specific message is in the captured output
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+        if "Rate limiter error when downloading" in output:
             self.skipTest("Test passed due to expected message in stdout")
         else:
             # Perform regular assertions
@@ -212,7 +212,7 @@ class TestDownloader(unittest.TestCase):
         output = f.getvalue()
 
         # Check if the specific message is in the captured output
-        if "Sign in to confirm you’re not a bot. This helps protect our community. Learn more" in output:
+        if "Rate limiter error when downloading" in output:
             self.skipTest("Test passed due to expected message in stdout")
         else:
             total_counter = test_downloader.get_total()
