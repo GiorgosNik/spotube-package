@@ -15,7 +15,7 @@ import contextlib
 class RateLimiterException(Exception):
     pass
 
-throtling_messages = ["This content isn't available, try again later.", "Sign in to confirm you\u2019re not a bot. This helps protect our community"]
+throtling_messages = ["This content isn't available, try again later.", "Sign in to confirm you"]
 
 # Setup logging configuration
 logging.basicConfig(filename='download_errors.log', level=logging.ERROR,
@@ -136,7 +136,7 @@ def download_song(given_link, song_info, downloader, directory):
                 downloader.extract_info(given_link)
             stdout = stdout_buffer.getvalue()
             stderr = stderr_buffer.getvalue()
-            
+
             if any(error in stdout for error in throtling_messages) or any(error in stderr for error in throtling_messages):
                 raise RateLimiterException("An error occurred, please try again later.")
 
