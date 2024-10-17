@@ -4,11 +4,16 @@ import eyed3
 import requests
 from tqdm import tqdm
 from yt_dlp import YoutubeDL
-import os
 from pydub import AudioSegment
 from pathlib import Path
 from spotube.dependency_handler import DependencyHandler
 import logging
+import io
+import mimetypes
+import contextlib
+
+class RateLimiterException(Exception):
+    pass
 
 # Setup logging configuration
 logging.basicConfig(filename='download_errors.log', level=logging.ERROR,
@@ -28,22 +33,36 @@ def get_lyrics(name_search, artist_search, genius_obj):
     name_search = name_search.split(sep4)[0]
     name_search = name_search.split(sep5)[0]
     genius_song = genius_obj.search_song(name_search, artist_search)
+
+    if(genius_song is None):
+        return None
     formatted_lyrics = genius_song.lyrics.rsplit(" ", 1)[0].replace("EmbedShare", "")
     formatted_lyrics = formatted_lyrics.rsplit(" ", 1)[0] + "".join(
         [i for i in formatted_lyrics.rsplit(" ", 1)[1] if not i.isdigit()]
     )
     return formatted_lyrics
 
-
 def set_tags(song_info, genius_obj, directory):
     audio_file = eyed3.load(directory + "/" + song_info["name"] + ".mp3")
-
+    
     if audio_file.tag is None:
         audio_file.initTag()
+        
+    if audio_file.tag is None:  #pragma: no cover
+        logging.error(f"Failed to initialize tags for {song_info['name']}")
+        return
 
-    audio_file.tag.images.set(
-        3, open(directory + COVER_PHOTO, "rb").read(), "image/jpeg"
-    )
+    cover_photo_path = directory + COVER_PHOTO
+    if os.path.exists(cover_photo_path):
+        mime_type, _ = mimetypes.guess_type(cover_photo_path)
+        if mime_type is None:
+            mime_type = "image/jpeg"  
+
+        with open(cover_photo_path, "rb") as img_file:
+            audio_file.tag.images.set(3, img_file.read(), mime_type)
+    else:   #pragma: no cover
+        logging.error(f"Cover photo not found at: {cover_photo_path}")
+
     formatted_artist_string = song_info["artist"].replace(",", ";")
     audio_file.tag.artist = formatted_artist_string
     audio_file.tag.title = song_info["name"]
@@ -51,14 +70,16 @@ def set_tags(song_info, genius_obj, directory):
     audio_file.tag.year = song_info["year"]
 
     try:
-        audio_file.tag.lyrics.set(
-            get_lyrics(song_info["name"], song_info["artist"], genius_obj)
-        )
-    except Exception:
-        pass
+        lyrics = get_lyrics(song_info["name"], song_info["artist"], genius_obj)
+        if lyrics:
+            audio_file.tag.lyrics.set(lyrics)
+        else:   #pragma: no cover
+            logging.info(f"Lyrics not found for {song_info['name']} by {song_info['artist']}")
+    except Exception as e:  #pragma: no cover
+        logging.error(f"Error setting lyrics for {song_info['name']}: {e}")
 
     audio_file.tag.save()
-    os.remove(directory + COVER_PHOTO)
+    os.remove(cover_photo_path)
 
 
 def format_artists(artist_list):
@@ -77,13 +98,16 @@ def get_link(song_info):
     video_search = VideosSearch(song_info["name"] + " " + song_info["artist"], limit=3)
     best_link = None
 
-    for search_result in video_search.result()["result"]:
-        duration_str = search_result["duration"].replace(":", " ").split()
-        duration_int = int(duration_str[0]) * 60000 + int(duration_str[1]) * 1000
+    try:
+        for search_result in video_search.result()["result"]:
+            duration_str = search_result["duration"].replace(":", " ").split()
+            duration_int = int(duration_str[0]) * 60000 + int(duration_str[1]) * 1000
 
-        if abs(duration_int - song_info["duration"]) < min_difference:
-            min_difference = abs(duration_int - song_info["duration"])
-            best_link = search_result["link"]
+            if abs(duration_int - song_info["duration"]) < min_difference:
+                min_difference = abs(duration_int - song_info["duration"])
+                best_link = search_result["link"]
+    except Exception as e:  # pragma: no cover
+        logging.error(f"Error getting link for {song_info['name']}: {e}")
 
     if best_link is None:
         best_link = ""
@@ -104,7 +128,15 @@ def download_song(given_link, song_info, downloader, directory):
 
     while attempts <= 3:
         try:
-            downloader.extract_info(given_link)
+            stdout_buffer = io.StringIO()
+            stderr_buffer = io.StringIO()
+            with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+                downloader.extract_info(given_link)
+            stdout = stdout_buffer.getvalue()
+            stderr = stderr_buffer.getvalue()
+            if "This content isn't available, try again later." in stdout or "This content isn't available, try again later." in stderr:
+                raise RateLimiterException("This content isn't available, try again later.")
+
             default_song_name = "/downloaded_song.mp3"
 
             # Overwrite the file, if it exists
@@ -114,9 +146,12 @@ def download_song(given_link, song_info, downloader, directory):
             return
 
         except Exception as e:  # pragma: no cover
-            print(str(e))
-            attempts += 1
-            continue
+            if isinstance(e, RateLimiterException):
+                raise e
+            else:   #pragma: no cover
+                logging.error(str(e))
+                attempts += 1
+                continue
 
 
 def get_songs(playlist_link, spotify_api):
@@ -243,7 +278,13 @@ def download_playlist(
         try:
             song_progress.set_description(info_dict["name"] + ": Downloading Song")
             song_progress.update(n=1)
-            download_song(link, info_dict, audio_downloader, directory)
+
+            try:
+                download_song(link, info_dict, audio_downloader, directory)
+            except RateLimiterException as e:
+                logging.error(f"TRate limiter error when downloading {info_dict['name']}")
+                audio_downloader = create_audio_downloader(directory)
+                download_song(link, info_dict, audio_downloader, directory)
 
             # Edit the ID3 Tags
             song_progress.set_description(info_dict["name"] + ": Setting Tags")
