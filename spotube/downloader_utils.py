@@ -335,7 +335,7 @@ def download_playlist(
 
 # Create downloader object, pass options
 def create_audio_downloader(directory: str) -> YoutubeDL:
-    if not DependencyHandler.ffmpeg_installed():
+    if not DependencyHandler.ffmpeg_installed(): #pragma: no cover
         audio_downloader: YoutubeDL = YoutubeDL(
             {
                 "format": "bestaudio",
