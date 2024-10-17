@@ -107,7 +107,7 @@ class TestDownloader(unittest.TestCase):
         output = f.getvalue()
 
         # Check if the specific message is in the captured output
-        if "Rate limiter error when downloading" in output:
+        if "Sign in to confirm you" in output:
             self.skipTest("Test passed due to expected message in stdout")
         else:
             self.assertTrue(
@@ -121,17 +121,15 @@ class TestDownloader(unittest.TestCase):
         )
 
         # Capture stdout output in a StringIO buffer
-        f = io.StringIO()
-        with contextlib.redirect_stdout(f):
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
             test_downloader.start_downloader(VALID_PLAYLIST)
             while test_downloader.downloader_active():
                 time.sleep(1)
         
-        # Get the stdout contents
-        output = f.getvalue()
-
         # Check if the specific message is in the captured output
-        if "Rate limiter error when downloading" in output:
+        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
             self.skipTest("Test passed due to expected message in stdout")
         else:
             # Perform regular assertions
@@ -174,7 +172,7 @@ class TestDownloader(unittest.TestCase):
         output = f.getvalue()
 
         # Check if the specific message is in the captured output
-        if "Rate limiter error when downloading" in output:
+        if "Sign in to confirm you" in output:
             self.skipTest("Test passed due to expected message in stdout")
         else:
             # Perform regular assertions
@@ -212,7 +210,7 @@ class TestDownloader(unittest.TestCase):
         output = f.getvalue()
 
         # Check if the specific message is in the captured output
-        if "Rate limiter error when downloading" in output:
+        if "Sign in to confirm you" in output:
             self.skipTest("Test passed due to expected message in stdout")
         else:
             total_counter = test_downloader.get_total()
