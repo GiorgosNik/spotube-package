@@ -10,12 +10,14 @@ from spotube.dependency_handler import DependencyHandler
 import logging
 import time
 
+
 class RateLimiterException(Exception):
     pass
 
 THROTTLING_MESSAGES = ["This content isn't available, try again later.", "Sign in to confirm you"]
 default_song_name = "/downloaded_song.mp3"
 TARGET_DBFS = -14.0
+
 
 # Setup logging configuration
 logging.basicConfig(filename='download_errors.log', level=logging.ERROR,
@@ -47,6 +49,7 @@ def set_tags(song_info, genius_obj, directory):
 
     # Default to none to prevent errors
     formatted_artist_string = song_info.get("artist", "").replace(",", ";")
+
     audio_file.tag.artist = formatted_artist_string
     audio_file.tag.title = song_info.get("name", "")
     audio_file.tag.album = song_info.get("album", "")
@@ -59,8 +62,9 @@ def set_tags(song_info, genius_obj, directory):
     except Exception:
         pass
 
+
     audio_file.tag.save()
-    os.remove(directory + COVER_PHOTO)
+    os.remove(cover_photo_path)
 
 
 
@@ -111,6 +115,7 @@ def download_song(given_link, song_info, downloader, directory):
     while attempts <= 3:
         try:
             downloader.extract_info(given_link)
+
             # Overwrite the file, if it exists
             if os.path.exists(directory + "/" + song_info["name"] + ".mp3"):
                 os.remove(directory + "/" + song_info["name"] + ".mp3")
@@ -123,6 +128,7 @@ def download_song(given_link, song_info, downloader, directory):
                 raise RateLimiterException("Rate Limiter Detected")
             else:
                 logging.error(str(e))
+
                 continue
 
 
@@ -253,6 +259,7 @@ def download_playlist(
             except RateLimiterException as e:  #pragma: no cover
                 time.sleep(200)
                 logging.error(f"Rate limiter error when downloading {info_dict['name']}")
+
                 audio_downloader = create_audio_downloader(directory)
                 download_song(link, info_dict, audio_downloader, directory)
 
