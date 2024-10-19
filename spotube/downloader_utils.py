@@ -8,14 +8,14 @@ from pydub import AudioSegment
 from pathlib import Path
 from spotube.dependency_handler import DependencyHandler
 import logging
-import io
-import mimetypes
-import contextlib
+import time
 
 class RateLimiterException(Exception):
     pass
 
-throtling_messages = ["This content isn't available, try again later.", "Sign in to confirm you"]
+THROTTLING_MESSAGES = ["This content isn't available, try again later.", "Sign in to confirm you"]
+default_song_name = "/downloaded_song.mp3"
+TARGET_DBFS = -14.0
 
 # Setup logging configuration
 logging.basicConfig(filename='download_errors.log', level=logging.ERROR,
@@ -24,16 +24,8 @@ logging.basicConfig(filename='download_errors.log', level=logging.ERROR,
 COVER_PHOTO = "/cover_photo.jpg"
 
 def get_lyrics(name_search, artist_search, genius_obj):
-    sep1 = "ft."
-    sep2 = "feat"
-    sep3 = "(feat"
-    sep4 = "(ft."
-    sep5 = "(feat."
-    name_search = name_search.split(sep1)[0]
-    name_search = name_search.split(sep2)[0]
-    name_search = name_search.split(sep3)[0]
-    name_search = name_search.split(sep4)[0]
-    name_search = name_search.split(sep5)[0]
+    for sep in ["ft.", "feat", "(feat", "(ft.", "(feat."]:
+        name_search = name_search.split(sep)[0]
     genius_song = genius_obj.search_song(name_search, artist_search)
 
     if(genius_song is None):
@@ -46,42 +38,30 @@ def get_lyrics(name_search, artist_search, genius_obj):
 
 def set_tags(song_info, genius_obj, directory):
     audio_file = eyed3.load(directory + "/" + song_info["name"] + ".mp3")
-    
-    if audio_file.tag is None:
-        audio_file.initTag()
-        
-    if audio_file.tag is None:  #pragma: no cover
-        logging.error(f"Failed to initialize tags for {song_info['name']}")
-        return
 
-    cover_photo_path = directory + COVER_PHOTO
-    if os.path.exists(cover_photo_path):
-        mime_type, _ = mimetypes.guess_type(cover_photo_path)
-        if mime_type is None:
-            mime_type = "image/jpeg"  
+    audio_file.initTag()
+    audio_file.tag.images.set(
+        3, open(directory + COVER_PHOTO, "rb").read(), "image/jpeg"
+    )
+    audio_file.tag.save()
 
-        with open(cover_photo_path, "rb") as img_file:
-            audio_file.tag.images.set(3, img_file.read(), mime_type)
-    else:   #pragma: no cover
-        logging.error(f"Cover photo not found at: {cover_photo_path}")
-
-    formatted_artist_string = song_info["artist"].replace(",", ";")
+    # Default to none to prevent errors
+    formatted_artist_string = song_info.get("artist", "").replace(",", ";")
     audio_file.tag.artist = formatted_artist_string
-    audio_file.tag.title = song_info["name"]
-    audio_file.tag.album = song_info["album"]
-    audio_file.tag.year = song_info["year"]
+    audio_file.tag.title = song_info.get("name", "")
+    audio_file.tag.album = song_info.get("album", "")
+    audio_file.tag.year = song_info.get("year", "")
 
     try:
         lyrics = get_lyrics(song_info["name"], song_info["artist"], genius_obj)
         if lyrics:
             audio_file.tag.lyrics.set(lyrics)
-        else:   #pragma: no cover
-            logging.info(f"Lyrics not found for {song_info['name']} by {song_info['artist']}")
-    except Exception as e:  #pragma: no cover
-        logging.error(f"Error setting lyrics for {song_info['name']}: {e}")
+    except Exception:
+        pass
 
     audio_file.tag.save()
-    os.remove(cover_photo_path)
+    os.remove(directory + COVER_PHOTO)
+
 
 
 def format_artists(artist_list):
@@ -130,18 +110,7 @@ def download_song(given_link, song_info, downloader, directory):
 
     while attempts <= 3:
         try:
-            stdout_buffer = io.StringIO()
-            stderr_buffer = io.StringIO()
-            with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-                downloader.extract_info(given_link)
-            stdout = stdout_buffer.getvalue()
-            stderr = stderr_buffer.getvalue()
-
-            if any(error in stdout for error in throtling_messages) or any(error in stderr for error in throtling_messages):
-                raise RateLimiterException("An error occurred, please try again later.")
-
-            default_song_name = "/downloaded_song.mp3"
-
+            downloader.extract_info(given_link)
             # Overwrite the file, if it exists
             if os.path.exists(directory + "/" + song_info["name"] + ".mp3"):
                 os.remove(directory + "/" + song_info["name"] + ".mp3")
@@ -149,11 +118,11 @@ def download_song(given_link, song_info, downloader, directory):
             return
 
         except Exception as e:  # pragma: no cover
-            if isinstance(e, RateLimiterException):
-                raise e
-            else:   #pragma: no cover
+            attempts += 1
+            if any(error in str(e) for error in THROTTLING_MESSAGES):
+                raise RateLimiterException("Rate Limiter Detected")
+            else:
                 logging.error(str(e))
-                attempts += 1
                 continue
 
 
@@ -230,9 +199,8 @@ def download_playlist(
         filename = open(os.devnull, "w")
 
     # Set the tqdm progress bar
-    playlist_size = len(songs)
     playlist_progress = tqdm(
-        total=playlist_size,
+        total= len(songs),
         desc="Playlist Progress",
         position=0,
         leave=False,
@@ -264,9 +232,7 @@ def download_playlist(
         send_message(
             channel,
             type="song_title",
-            contents="{} by {}".format(
-                info_dict["name"], info_dict["artist"].split(",")[0]
-            ),
+            contents=f"{info_dict['name']} by {info_dict['artist'].split(',')[0]}",
         )
 
         # Search for the best candidate
@@ -285,8 +251,8 @@ def download_playlist(
             try:
                 download_song(link, info_dict, audio_downloader, directory)
             except RateLimiterException as e:  #pragma: no cover
+                time.sleep(200)
                 logging.error(f"Rate limiter error when downloading {info_dict['name']}")
-                print(f"Rate limiter error when downloading {info_dict['name']}")
                 audio_downloader = create_audio_downloader(directory)
                 download_song(link, info_dict, audio_downloader, directory)
 
@@ -377,7 +343,6 @@ def match_target_amplitude(sound: AudioSegment, target_dbfs: float) -> AudioSegm
     change_in_dbfs = target_dbfs - sound.dBFS
     return sound.apply_gain(change_in_dbfs)
 
-
 def normalize_volume_levels(directory: str) -> None:
     if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
         print("WARNING: ffmpeg not found in PATH, volume normalization skipped.")
@@ -387,15 +352,38 @@ def normalize_volume_levels(directory: str) -> None:
         raise ValueError("Invalid directory")
 
     abs_path: str = os.path.abspath(directory)
-
     files: list = os.listdir(directory)
 
     normalization_progress: tqdm = tqdm(
         total=len(files), desc="Normalizing Sound", position=0, leave=False
     )
+    
     for file in files:
         if file.endswith(".mp3"):
-            sound: AudioSegment = AudioSegment.from_file(abs_path + "/" + file, "mp3")
-            normalized_sound: AudioSegment = match_target_amplitude(sound, -14.0)
-            normalized_sound.export(abs_path + "/" + file, format="mp3")
+            file_path = os.path.join(abs_path, file)
+            
+            # Load tags (metadata) before modifying the file
+            audiofile = eyed3.load(file_path)
+            tags = audiofile.tag
+
+            # Load the audio file
+            sound: AudioSegment = AudioSegment.from_file(file_path, "mp3")
+            normalized_sound: AudioSegment = match_target_amplitude(sound, TARGET_DBFS)
+
+            # Export the normalized sound to a temporary file
+            temp_file = file_path + "_temp.mp3"
+            normalized_sound.export(temp_file, format="mp3")
+
+            # Reload the normalized file with eyed3 to preserve the tags
+            normalized_audiofile = eyed3.load(temp_file)
+            if tags is not None:
+                normalized_audiofile.tag = tags  # Apply the original tags back
+
+            normalized_audiofile.tag.save()
+            
+            # Replace original file with the normalized file
+            os.replace(temp_file, file_path)
+
             normalization_progress.update(n=1)
+
+    normalization_progress.close()
