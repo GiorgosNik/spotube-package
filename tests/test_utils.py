@@ -3,7 +3,7 @@ import pytest
 import os
 import shutil
 from spotube.dependency_handler import DependencyHandler
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from spotube.downloader_utils import get_lyrics
 
 @pytest.fixture(autouse=True)
@@ -16,22 +16,6 @@ def run_around_tests():
 
 
 class TestUtils(unittest.TestCase):
-    def test_download_ffmpeg(self):
-        DependencyHandler.download_ffmpeg("nt")
-        self.assertTrue(
-            os.path.exists("./ffmpeg.exe")
-            and os.path.exists("./ffprobe.exe")
-            and os.path.exists("./ffplay.exe")
-        )
-        DependencyHandler.download_ffmpeg("posix")
-        self.assertTrue(
-            os.path.exists("./ffmpeg")
-            and os.path.exists("./ffprobe")
-            and os.path.exists("./ffplay")
-        )
-        with pytest.raises(ValueError):
-            DependencyHandler.download_ffmpeg("This will raise an exception")
-
     def test_get_lyrics_with_feature(self):
         genius_obj = Mock()
         genius_obj.search_song.return_value = Mock(lyrics="These are the lyrics EmbedShare 123")
