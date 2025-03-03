@@ -1,6 +1,5 @@
 import os
 from tqdm import tqdm
-import os
 import subprocess
 import urllib.request
 from platform import machine
@@ -106,6 +105,7 @@ class DependencyHandler:
 
     @staticmethod
     def extract_bin_from_tarball(filename):
+        target_dir = "."
         with tarfile.open(filename) as archive:
             members = archive.getmembers()
             extraction_bar = tqdm(
@@ -114,8 +114,12 @@ class DependencyHandler:
             for member in members:
                 if member.isreg() and member.name.split(".")[0] == member.name:
                     member.name = os.path.basename(member.name)
-                    if os.getcwd() not in  os.path.realpath(member.name):
-                        raise RuntimeError("Invalid tarball")
-                    archive.extract(member.name, ".")
+                    target_path = os.path.join(target_dir, member.name)
+                    target_path = os.path.normpath(target_path)
+                    if os.path.commonprefix([os.path.abspath(target_dir), os.path.abspath(target_path)]) != os.path.abspath(target_dir):
+                        raise RuntimeError("Invalid tarball: path traversal attempt detected")
+                    with archive.extractfile(member) as source:
+                        with open(target_path, 'wb') as target:
+                            target.write(source.read())
                 extraction_bar.update(n=1)
         os.remove(filename)
