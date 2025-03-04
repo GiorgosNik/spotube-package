@@ -15,10 +15,10 @@ import contextlib
 class RateLimiterException(Exception):
     pass
 
-throtling_messages = ["This content isn't available, try again later.", "Sign in to confirm you"]
+throttling_messages = ["This content isn't available, try again later.", "Sign in to confirm you"]
 
 # Setup logging configuration
-logging.basicConfig(filename='download_errors.log', level=logging.ERROR,
+logging.basicConfig(filename='errors.log', level=logging.ERROR,
                     format='%(asctime)s:%(levelname)s:%(message)s')
 
 COVER_PHOTO = "/cover_photo.jpg"
@@ -137,7 +137,7 @@ def download_song(given_link, song_info, downloader, directory):
             stdout = stdout_buffer.getvalue()
             stderr = stderr_buffer.getvalue()
 
-            if any(error in stdout for error in throtling_messages) or any(error in stderr for error in throtling_messages):
+            if any(error in stdout for error in throttling_messages) or any(error in stderr for error in throttling_messages):
                 raise RateLimiterException("An error occurred, please try again later.")
 
             default_song_name = "/downloaded_song.mp3"
@@ -163,9 +163,11 @@ def get_songs(playlist_link, spotify_api):
     songs = results["items"]
 
     while results["next"]:
-        results = spotify_api.next(results)
-        songs.extend(results["items"])
-
+        try:
+            results = spotify_api.next(results)
+            songs.extend(results["items"])
+        except StopIteration:
+            return songs
     return songs
 
 
@@ -210,127 +212,116 @@ def format_song_data(song):
 
 
 def download_playlist(
-    playlist_url, authenticator, channel, termination_channel, directory, display_bar = True, normalize_sound = True, song_number_limit = 0
+    playlist_url, authenticator, channel, termination_channel, directory, display_bar=True, normalize_sound=True, song_number_limit=0
 ):
-    # Set up the folder for the songs
+    ensure_directory_exists(directory)
+    audio_downloader = create_audio_downloader(directory)
+    songs = fetch_playlist_songs(playlist_url, authenticator, song_number_limit)
+    filename = None if display_bar else open(os.devnull, "w")
+    playlist_progress = initialize_progress_bar(len(songs), filename)
+    process_songs(songs, audio_downloader, directory, authenticator, channel, termination_channel, playlist_progress, filename)
+    finalize_download(playlist_progress, channel, directory, normalize_sound)
+
+def ensure_directory_exists(directory):
     if not os.path.isdir(directory):
         Path(directory).mkdir(parents=True, exist_ok=True)
 
-    audio_downloader = create_audio_downloader(directory)
-
+def fetch_playlist_songs(playlist_url, authenticator, song_number_limit):
     songs = get_songs(playlist_url, authenticator.spotify_auth)
+    return songs[:song_number_limit] if song_number_limit > 0 else songs
 
-    # Limit the number of songs to download
-    if song_number_limit > 0:
-        songs = songs[:song_number_limit]
+def initialize_progress_bar(playlist_size, filename):
+    return tqdm(total=playlist_size, desc="Playlist Progress", position=0, leave=False, file=filename)
 
-    if display_bar:
-        filename = None
-    else:
-        filename = open(os.devnull, "w")
-
-    # Set the tqdm progress bar
-    playlist_size = len(songs)
-    playlist_progress = tqdm(
-        total=playlist_size,
-        desc="Playlist Progress",
-        position=0,
-        leave=False,
-        file=filename,
-    )
-
-    success_counter = 0
-    failure_counter = 0
-
+def process_songs(songs, audio_downloader, directory, authenticator, channel, termination_channel, playlist_progress, filename):
+    success_counter, failure_counter = 0, 0
+    
     for song in songs:
-        # Set song progress bar
-        song_progress = tqdm(
-            total=4,
-            desc=song["track"]["name"],
-            position=1,
-            leave=False,
-            file=filename,
-        )
-
-        # Retrieve Formatted Song Data
-        song_progress.set_description(song_progress.desc + ": Formatting Information")
-        song_progress.update(n=1)
-        info_dict = format_song_data(song)
-
-        # Download Cover Art, to preview to UI
-        download_image(info_dict, directory)
-
-        # Send Message to UI
-        send_message(
-            channel,
-            type="song_title",
-            contents="{} by {}".format(
-                info_dict["name"], info_dict["artist"].split(",")[0]
-            ),
-        )
-
-        # Search for the best candidate
-        song_progress.set_description(info_dict["name"] + ": Selecting Best Link")
-        song_progress.update(n=1)
-        link = get_link(info_dict)
-        if link == "":
-            logging.error(f"Failed to download {info_dict['name']} after 3 attempts. Error: Could not find link")
-            continue
-
-        # Download the song
-        try:
-            song_progress.set_description(info_dict["name"] + ": Downloading Song")
-            song_progress.update(n=1)
-
-            try:
-                download_song(link, info_dict, audio_downloader, directory)
-            except RateLimiterException as e:  #pragma: no cover
-                logging.error(f"Rate limiter error when downloading {info_dict['name']}")
-                print(f"Rate limiter error when downloading {info_dict['name']}")
-                audio_downloader = create_audio_downloader(directory)
-                download_song(link, info_dict, audio_downloader, directory)
-
-            # Edit the ID3 Tags
-            song_progress.set_description(info_dict["name"] + ": Setting Tags")
-            song_progress.update(n=1)
-            set_tags(info_dict, authenticator.genius_auth, directory)
-
-            # Move to the designated folder
-            song_progress.set_description(
-                info_dict["name"] + ": Moving to designated folder"
-            )
-            song_progress.update(n=1)
+        if process_single_song(song, audio_downloader, directory, authenticator, channel, filename):
             success_counter += 1
-
-        except Exception as e:  # pragma: no cover
+        else:
             failure_counter += 1
-            logging.error(f"Failed to download {info_dict['name']} after 3 attempts. Error: {str(e)}")
-            continue
-        song_progress.close()
+        
+        update_progress(playlist_progress, channel, success_counter, failure_counter)
+        
+        if check_termination(termination_channel):
+            return success_counter, failure_counter
+    
+    return success_counter, failure_counter
 
-        # Update tqdm progress bar
-        playlist_progress.update(n=1)
-        send_message(
-            channel,
-            type="progress",
-            contents=[playlist_progress.n, playlist_progress.total, success_counter, failure_counter],
-        )
+def process_single_song(song, audio_downloader, directory, authenticator, channel, filename):
+    song_progress = initialize_song_progress(song, filename)
+    info_dict = retrieve_song_info(song, song_progress)
+    download_image(info_dict, directory)
+    notify_ui(channel, info_dict)
+    
+    link = get_link(info_dict)
+    if not link:
+        logging.error(f"Failed to download {info_dict['name']} after 3 attempts. Error: Could not find link")
+        return False
+    
+    if not download_and_process_song(link, info_dict, audio_downloader, directory, authenticator, song_progress):
+        return False
+    
+    song_progress.close()
+    return True
 
-        elapsed = get_elapsed(playlist_progress)
-        eta = get_eta(playlist_progress)
-        send_message(channel, type="eta_update", contents=[elapsed, eta])
+def initialize_song_progress(song, filename):
+    return tqdm(total=4, desc=song["track"]["name"], position=1, leave=False, file=filename)
 
-        # Check for termination message
-        if not termination_channel.empty():
-            message = termination_channel.get()
-            if message == "EXIT":
-                return
+def retrieve_song_info(song, song_progress):
+    song_progress.set_description(f"{song_progress.desc}: Formatting Information")
+    song_progress.update(n=1)
+    return format_song_data(song)
 
+def notify_ui(channel, info_dict):
+    send_message(channel, type="song_title", contents=f"{info_dict['name']} by {info_dict['artist'].split(',')[0]}")
+
+def download_and_process_song(link, info_dict, audio_downloader, directory, authenticator, song_progress):
+    try:
+        download_song_with_retry(link, info_dict, audio_downloader, directory, song_progress)
+        set_song_tags(info_dict, authenticator, directory, song_progress)
+        move_song_to_folder(info_dict, song_progress)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to download {info_dict['name']} after 3 attempts. Error: {str(e)}")
+        return False
+
+def download_song_with_retry(link, info_dict, audio_downloader, directory, song_progress):
+    song_progress.set_description(f"{info_dict['name']}: Downloading Song")
+    song_progress.update(n=1)
+    
+    try:
+        download_song(link, info_dict, audio_downloader, directory)
+    except RateLimiterException:
+        logging.error(f"Rate limiter error when downloading {info_dict['name']}")
+        audio_downloader = create_audio_downloader(directory)
+        download_song(link, info_dict, audio_downloader, directory)
+
+def set_song_tags(info_dict, authenticator, directory, song_progress):
+    song_progress.set_description(f"{info_dict['name']}: Setting Tags")
+    song_progress.update(n=1)
+    set_tags(info_dict, authenticator.genius_auth, directory)
+
+def move_song_to_folder(info_dict, song_progress):
+    song_progress.set_description(f"{info_dict['name']}: Moving to designated folder")
+    song_progress.update(n=1)
+
+def update_progress(playlist_progress, channel, success_counter, failure_counter):
+    playlist_progress.update(n=1)
+    send_message(channel, type="progress", contents=[playlist_progress.n, playlist_progress.total, success_counter, failure_counter])
+    elapsed, eta = get_elapsed(playlist_progress), get_eta(playlist_progress)
+    send_message(channel, type="eta_update", contents=[elapsed, eta])
+
+def check_termination(termination_channel):
+    if not termination_channel.empty():
+        return termination_channel.get() == "EXIT"
+    return False
+
+def finalize_download(playlist_progress, channel, directory, normalize_sound):
     if normalize_sound:
         normalize_volume_levels(directory)
-
     playlist_progress.close()
-
     send_message(channel, type="download_complete", contents=[])
 
 # Create downloader object, pass options
@@ -378,6 +369,49 @@ def match_target_amplitude(sound: AudioSegment, target_dbfs: float) -> AudioSegm
     return sound.apply_gain(change_in_dbfs)
 
 
+def _restore_audio_tags(file_path: str, tags: dict) -> None:
+    if tags:
+        audio_file = eyed3.load(file_path)
+        if audio_file.tag is None:
+            audio_file.initTag()
+
+        audio_file.tag.artist = tags.get("artist")
+        audio_file.tag.title = tags.get("title")
+        audio_file.tag.album = tags.get("album")
+        audio_file.tag.lyrics.set(tags.get("lyrics", ""))
+        
+        # Restore images
+        for image_path in tags.get("images", []):
+            with open(image_path, "rb") as img_file:
+                audio_file.tag.images.set(3, img_file.read(), "image/jpeg")
+            os.remove(image_path)  # Delete image after restoration
+        
+        audio_file.tag.save()
+
+def _extract_tags(audio_file) -> dict:
+    if not audio_file or not audio_file.tag:
+        return {"artist": "", "title": "", "album": "", "lyrics": "", "images": []}
+    
+    tags = {
+        "artist": audio_file.tag.artist or "",
+        "title": audio_file.tag.title or "",
+        "album": audio_file.tag.album or "",
+        "lyrics": audio_file.tag.lyrics[0].text if audio_file.tag.lyrics else "",
+        "images": []
+    }
+    
+    return tags
+
+def _save_images(directory: str, audio_file, tags: dict) -> None:
+    if not audio_file or not audio_file.tag:
+        return
+    
+    for image in audio_file.tag.images:
+        image_path = os.path.join(directory, f"{tags['artist']} - {tags['album']}({image.picture_type}).jpg")
+        with open(image_path, "wb") as img_file:
+            img_file.write(image.image_data)
+        tags["images"].append(image_path)
+
 def normalize_volume_levels(directory: str) -> None:
     if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
         print("WARNING: ffmpeg not found in PATH, volume normalization skipped.")
@@ -387,15 +421,25 @@ def normalize_volume_levels(directory: str) -> None:
         raise ValueError("Invalid directory")
 
     abs_path: str = os.path.abspath(directory)
-
-    files: list = os.listdir(directory)
+    files: list = [f for f in os.listdir(directory) if f.endswith(".mp3")]
 
     normalization_progress: tqdm = tqdm(
         total=len(files), desc="Normalizing Sound", position=0, leave=False
     )
+    
     for file in files:
-        if file.endswith(".mp3"):
-            sound: AudioSegment = AudioSegment.from_file(abs_path + "/" + file, "mp3")
-            normalized_sound: AudioSegment = match_target_amplitude(sound, -14.0)
-            normalized_sound.export(abs_path + "/" + file, format="mp3")
-            normalization_progress.update(n=1)
+        file_path = os.path.join(abs_path, file)
+
+        # Load original tags and save images
+        audio_file = eyed3.load(file_path)
+        tags = _extract_tags(audio_file)
+        _save_images(directory, audio_file, tags)
+
+        # Normalize audio
+        sound: AudioSegment = AudioSegment.from_file(file_path, "mp3")
+        normalized_sound: AudioSegment = match_target_amplitude(sound, -14.0)
+        normalized_sound.export(file_path, format="mp3")
+
+        # Restore tags
+        _restore_audio_tags(file_path, tags)
+        normalization_progress.update(n=1)

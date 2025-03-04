@@ -6,6 +6,7 @@ from platform import machine
 import tarfile
 import zipfile
 from spotube.progress_bar import ProgressBar
+import shutil
 
 FFMPEG_UNIX_X64 = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
 FFMPEG_UNIX_ARM = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
@@ -18,7 +19,7 @@ class DependencyHandler:
     def ffmpeg_installed():
         if os.name == "nt":
             # Windows
-            if not os.path.exists("./ffmpeg.exe"):
+            if not (os.path.exists("./ffmpeg.exe") or shutil.which("ffmpeg")):
                 return False
 
         elif os.name == "posix":
