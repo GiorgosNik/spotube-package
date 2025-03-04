@@ -10,7 +10,6 @@ cffi>=1.17.1
 charset-normalizer>=3.4.1
 cleo>=2.1.0
 colorama>=0.4.6
-coverage>=5.5
 crashtest>=0.4.1
 cryptography>=44.0.0
 deprecation>=2.1.0
