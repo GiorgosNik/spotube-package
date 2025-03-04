@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: code-coverage
+          name: code-coverage-win
           path: htmlcov
           
   build:
