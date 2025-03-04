@@ -1,4 +1,3 @@
-import unittest
 import pytest
 import os
 import shutil
@@ -14,7 +13,8 @@ from spotube.downloader_utils import normalize_volume_levels
 from spotube.downloader_utils import set_tags
 import unittest
 from unittest.mock import Mock, patch
-import os
+from spotube.downloader_utils import _save_images
+from spotube.downloader_utils import _restore_audio_tags
 
 @pytest.fixture(autouse=True)
 def run_around_tests():
@@ -139,7 +139,6 @@ class TestUtils(unittest.TestCase):
         })
 
     def test_send_message_no_channel(self):
-        # Should not raise any error when channel is None
         send_message(None, "test_type", ["test_content"])
 
     def test_extract_tags_with_no_tag(self):
@@ -176,16 +175,13 @@ class TestUtils(unittest.TestCase):
         assert result == expected
     
     def test_normalize_volume_levels(self):
-        # Create test directory
         test_dir = "./Test_Directory"
         os.makedirs(test_dir, exist_ok=True)
         
-        # Mock dependencies
         mock_audio_segment = Mock(spec=AudioSegment)
         mock_audio_segment.dBFS = -20.0
         mock_audio_segment.export.return_value = None
         
-        # Create a patch for AudioSegment.from_file to return our mock
         with unittest.mock.patch('spotube.downloader_utils.AudioSegment.from_file', 
                                 return_value=mock_audio_segment), \
              unittest.mock.patch('spotube.downloader_utils.match_target_amplitude', 
@@ -196,28 +192,20 @@ class TestUtils(unittest.TestCase):
              unittest.mock.patch('spotube.downloader_utils._save_images'), \
              unittest.mock.patch('spotube.downloader_utils.DependencyHandler.ffmpeg_installed', return_value=True):
             
-            # Create a test MP3 file
             with open(os.path.join(test_dir, "test_song.mp3"), "w") as f:
                 f.write("dummy mp3 content")
                 
-            # Import here to avoid circular import in the test
-            
-            # Call the function
             normalize_volume_levels(test_dir)
             
-            # Assertions
             mock_audio_segment.export.assert_called_once()
         
     def test_set_tags_success(self):
-        # Create test directory and file
         test_dir = "./Test_Directory"
         os.makedirs(test_dir, exist_ok=True)
         
-        # Create a mock cover photo file
         with open(os.path.join(test_dir, "cover_photo.jpg"), "w") as f:
             f.write("dummy image content")
         
-        # Create mock song info
         song_info = {
             "name": "Test Song",
             "artist": "Test Artist",
@@ -225,10 +213,9 @@ class TestUtils(unittest.TestCase):
             "year": "2021"
         }
         
-        # Mock eyed3 load and tag functions
         mock_audio_file = Mock()
         mock_tag = Mock()
-        mock_audio_file.tag = mock_tag  # Ensure tag is a mock object
+        mock_audio_file.tag = mock_tag
         mock_tag.artist = Mock()
         mock_tag.title = Mock()
         mock_tag.album = Mock()
@@ -237,7 +224,6 @@ class TestUtils(unittest.TestCase):
         mock_tag.lyrics.set = Mock()
         mock_tag.save = Mock()
 
-        # Create mocks for dependencies
         genius_obj = Mock()
         genius_obj.search_song.return_value = Mock(lyrics="Test Lyrics EmbedShare 123")
         
@@ -247,16 +233,70 @@ class TestUtils(unittest.TestCase):
                 patch('mimetypes.guess_type', return_value=("image/jpeg", None)), \
                 patch('spotube.downloader_utils.get_lyrics', return_value="Test Lyrics"):
             
-            # Import function to test
             set_tags(song_info, genius_obj, test_dir)
             
-            # Assertions
             assert mock_tag.artist =="Test Artist"
             assert mock_tag.title =="Test Song"
             assert mock_tag.year =="2021"
             assert mock_tag.album =="Test Album"
             mock_tag.lyrics.set.assert_called_once_with("Test Lyrics")
             mock_tag.save.assert_called_once()
+            
+    def test_save_images(self):
+        test_dir = "./Test_Directory"
+        os.makedirs(test_dir, exist_ok=True)
+        
+        mock_audio = Mock()
+        mock_image = Mock()
+        mock_image.picture_type = 3
+        mock_image.image_data = b'test image data'
+        mock_audio.tag.images = [mock_image]
+        
+        tags = {"artist": "Test Artist", "album": "Test Album", "images": []}
+        
+        with patch('os.path.join', return_value=os.path.join(test_dir, "Test Artist - Test Album(3).jpg")), \
+                patch('builtins.open', unittest.mock.mock_open()) as mock_file:
+            
+            _save_images(test_dir, mock_audio, tags)
+            
+            mock_file.assert_called_once_with(os.path.join(test_dir, "Test Artist - Test Album(3).jpg"), "wb")
+            mock_file().write.assert_called_once_with(b'test image data')
+            assert len(tags["images"]) == 1
+            assert tags["images"][0] == os.path.join(test_dir, "Test Artist - Test Album(3).jpg")
+
+    def test_restore_audio_tags(self):
+        test_dir = "./Test_Directory"
+        os.makedirs(test_dir, exist_ok=True)
+        
+        file_path = os.path.join(test_dir, "test_song.mp3")
+        
+        image_path = os.path.join(test_dir, "test_image.jpg")
+        tags = {
+            "artist": "Test Artist",
+            "title": "Test Title",
+            "album": "Test Album",
+            "lyrics": "Test Lyrics",
+            "images": [image_path]
+        }
+        
+        mock_audio_file = Mock()
+        mock_tag = Mock()
+        mock_audio_file.tag = mock_tag
+        
+        with patch('eyed3.load', return_value=mock_audio_file), \
+                patch('os.path.exists', return_value=True), \
+                patch('builtins.open', unittest.mock.mock_open(read_data=b'test image data')), \
+                patch('os.remove') as mock_remove:
+            
+            _restore_audio_tags(file_path, tags)
+            
+            assert mock_tag.artist == "Test Artist"
+            assert mock_tag.title == "Test Title"
+            assert mock_tag.album == "Test Album"
+            mock_tag.lyrics.set.assert_called_once_with("Test Lyrics")
+            mock_tag.images.set.assert_called_once_with(3, b'test image data', "image/jpeg")
+            mock_tag.save.assert_called_once()
+            mock_remove.assert_called_once_with(image_path)
 
 if __name__ == "__main__":
     unittest.main()
