@@ -2,21 +2,19 @@ import unittest
 import pytest
 import os
 import shutil
-from spotube.dependency_handler import DependencyHandler
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 from spotube.downloader_utils import get_lyrics
-from spotube.downloader_utils import format_artists
-from spotube.downloader_utils import format_artists
 from spotube.downloader_utils import format_artists
 from spotube.downloader_utils import format_song_data
 from spotube.downloader_utils import match_target_amplitude
 from pydub import AudioSegment
-from spotube.downloader_utils import ensure_directory_exists
-from pathlib import Path
-from spotube.downloader_utils import send_message
 from spotube.downloader_utils import send_message
 from spotube.downloader_utils import _extract_tags
-from spotube.downloader_utils import _extract_tags
+from spotube.downloader_utils import normalize_volume_levels
+from spotube.downloader_utils import set_tags
+import unittest
+from unittest.mock import Mock, patch
+import os
 
 @pytest.fixture(autouse=True)
 def run_around_tests():
@@ -176,6 +174,89 @@ class TestUtils(unittest.TestCase):
         }
         
         assert result == expected
+    
+    def test_normalize_volume_levels(self):
+        # Create test directory
+        test_dir = "./Test_Directory"
+        os.makedirs(test_dir, exist_ok=True)
+        
+        # Mock dependencies
+        mock_audio_segment = Mock(spec=AudioSegment)
+        mock_audio_segment.dBFS = -20.0
+        mock_audio_segment.export.return_value = None
+        
+        # Create a patch for AudioSegment.from_file to return our mock
+        with unittest.mock.patch('spotube.downloader_utils.AudioSegment.from_file', 
+                                return_value=mock_audio_segment), \
+             unittest.mock.patch('spotube.downloader_utils.match_target_amplitude', 
+                               return_value=mock_audio_segment), \
+             unittest.mock.patch('spotube.downloader_utils._extract_tags', 
+                               return_value={"artist": "Test", "title": "Song", "album": "Album", "lyrics": "", "images": []}), \
+             unittest.mock.patch('spotube.downloader_utils._restore_audio_tags'), \
+             unittest.mock.patch('spotube.downloader_utils._save_images'), \
+             unittest.mock.patch('spotube.downloader_utils.DependencyHandler.ffmpeg_installed', return_value=True):
+            
+            # Create a test MP3 file
+            with open(os.path.join(test_dir, "test_song.mp3"), "w") as f:
+                f.write("dummy mp3 content")
+                
+            # Import here to avoid circular import in the test
+            
+            # Call the function
+            normalize_volume_levels(test_dir)
+            
+            # Assertions
+            mock_audio_segment.export.assert_called_once()
+        
+    def test_set_tags_success(self):
+        # Create test directory and file
+        test_dir = "./Test_Directory"
+        os.makedirs(test_dir, exist_ok=True)
+        
+        # Create a mock cover photo file
+        with open(os.path.join(test_dir, "cover_photo.jpg"), "w") as f:
+            f.write("dummy image content")
+        
+        # Create mock song info
+        song_info = {
+            "name": "Test Song",
+            "artist": "Test Artist",
+            "album": "Test Album",
+            "year": "2021"
+        }
+        
+        # Mock eyed3 load and tag functions
+        mock_audio_file = Mock()
+        mock_tag = Mock()
+        mock_audio_file.tag = mock_tag  # Ensure tag is a mock object
+        mock_tag.artist = Mock()
+        mock_tag.title = Mock()
+        mock_tag.album = Mock()
+        mock_tag.year = Mock()
+        mock_tag.images.set = Mock()
+        mock_tag.lyrics.set = Mock()
+        mock_tag.save = Mock()
+
+        # Create mocks for dependencies
+        genius_obj = Mock()
+        genius_obj.search_song.return_value = Mock(lyrics="Test Lyrics EmbedShare 123")
+        
+        with patch('eyed3.load', return_value=mock_audio_file), \
+                patch('os.remove'), \
+                patch('os.path.exists', return_value=True), \
+                patch('mimetypes.guess_type', return_value=("image/jpeg", None)), \
+                patch('spotube.downloader_utils.get_lyrics', return_value="Test Lyrics"):
+            
+            # Import function to test
+            set_tags(song_info, genius_obj, test_dir)
+            
+            # Assertions
+            assert mock_tag.artist =="Test Artist"
+            assert mock_tag.title =="Test Song"
+            assert mock_tag.year =="2021"
+            assert mock_tag.album =="Test Album"
+            mock_tag.lyrics.set.assert_called_once_with("Test Lyrics")
+            mock_tag.save.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()
