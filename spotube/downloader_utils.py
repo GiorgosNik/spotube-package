@@ -403,14 +403,17 @@ def _extract_tags(audio_file) -> dict:
     return tags
 
 def _save_images(directory: str, audio_file, tags: dict) -> None:
-    if not audio_file or not audio_file.tag:
-        return
-    
-    for image in audio_file.tag.images:
-        image_path = os.path.join(directory, f"{tags['artist']} - {tags['album']}({image.picture_type}).jpg")
-        with open(image_path, "wb") as img_file:
-            img_file.write(image.image_data)
-        tags["images"].append(image_path)
+    try:
+        if not audio_file or not audio_file.tag:
+            return
+        
+        for image in audio_file.tag.images:
+            image_path = os.path.join(directory, f"{tags['artist']} - {tags['album']}({image.picture_type}).jpg")
+            with open(image_path, "wb") as img_file:
+                img_file.write(image.image_data)
+            tags["images"].append(image_path)
+    except Exception as e:  #pragma: no cover
+        logging.error(f"Error saving images: {e}")
 
 def normalize_volume_levels(directory: str) -> None:
     if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
