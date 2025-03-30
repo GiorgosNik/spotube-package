@@ -1,3 +1,4 @@
+import ctypes
 import threading
 import queue
 from . import downloader_utils as utils
@@ -5,6 +6,7 @@ import os
 import shutil
 from spotube.authenticator import Authenticator
 from spotube.dependency_handler import DependencyHandler
+
 
 class DownloadManager:
     def __init__(
@@ -15,9 +17,9 @@ class DownloadManager:
         directory: str = "./Songs",
         display_bar: bool = True,
         normalize_sound: bool = True,
-        song_number_limit: int = 0
+        song_number_limit: int = 0,
     ) -> None:
-        
+
         # Initialise the tracking values
         self.progress = 0
         self.working = False
@@ -33,6 +35,8 @@ class DownloadManager:
         self.normalize_sound = normalize_sound
         self.success_counter = 0
         self.fail_counter = 0
+        self.normalizing = False
+        self.normalized_songs = 0
         self.song_number_limit = song_number_limit
 
         # Set the channel that will handle the messages from the worker
@@ -48,6 +52,28 @@ class DownloadManager:
         if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
             DependencyHandler.download_ffmpeg(os_type=os.name)
 
+    def update_progress(
+        self,
+        progress: int,
+        total: int,
+        success_counter: int,
+        failure_counter: int,
+        current_song: str,
+        eta: str,
+        downloader_active: bool,
+        normalizing: bool,
+        normalized_songs: int,
+    ) -> None:
+        self.progress = progress
+        self.total = total
+        self.success_counter = success_counter
+        self.failure_counter = failure_counter
+        self.current_song = current_song
+        self.eta = eta
+        self.working = downloader_active
+        self.normalizing = normalizing
+        self.normalized_songs = normalized_songs
+
     def set_directory(self, directory: str) -> None:
         self.directory = directory
 
@@ -55,16 +81,26 @@ class DownloadManager:
         # Create a new thread to handle the download
         self.thread = threading.Thread(
             target=utils.download_playlist,
-            args=[
+            args=(
                 link,
                 self.authenticator,
-                self.channel,
                 self.termination_channel,
                 self.directory,
                 self.display_bar,
                 self.normalize_sound,
-                self.song_number_limit
-            ],
+                self.song_number_limit,
+                lambda progress, total, success_counter, failure_counter, current_song, eta, downloader_active, normalizing, normalized_songs: self.update_progress(
+                    progress,
+                    total,
+                    success_counter,
+                    failure_counter,
+                    current_song,
+                    eta,
+                    downloader_active,
+                    normalizing,
+                    normalized_songs
+                ),
+            ),
         )
         self.working = True
         self.thread.start()
@@ -72,9 +108,16 @@ class DownloadManager:
     def cancel_downloader(self) -> None:
         self.termination_channel.put("EXIT")
 
-        # Wait for thread to exit
-        if self.thread is not None:
-            self.thread.join()
+        # Kill Thread
+        if not self.thread.is_alive():
+            return
+        tid = ctypes.c_long(self.thread.ident)
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            tid, ctypes.py_object(SystemExit)
+        )
+        if res > 1:
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, None)
+            raise RuntimeError("Failed to kill thread")
 
         self.working = False
         self.progress = 0
@@ -86,11 +129,13 @@ class DownloadManager:
         self.termination_channel = queue.Queue()
         self.success_counter = 0
         self.fail_counter = 0
+        self.normalizing = False
+        self.normalized_songs = 0
 
         if os.path.isdir(self.directory):
             shutil.rmtree(self.directory)
 
-    def validate_playlist_url(self, playlist_url:str) -> bool:
+    def validate_playlist_url(self, playlist_url: str) -> bool:
         try:
             self.authenticator.spotify_auth.playlist_items(
                 playlist_url, additional_types=("track",)
@@ -98,61 +143,3 @@ class DownloadManager:
         except Exception:
             return False
         return True
-
-    def get_progress(self) -> int:
-        self.__fetch_messages()
-        return self.progress
-
-    def get_total(self) -> int:
-        self.__fetch_messages()
-        return self.total
-
-    def get_current_song(self) -> str:
-        self.__fetch_messages()
-        return self.current_song
-
-    def get_eta(self) -> int:
-        self.__fetch_messages()
-        return self.eta
-
-    def downloader_active(self) -> bool:
-        self.__fetch_messages()
-        return self.working
-
-    def get_success_counter(self) -> int:
-        self.__fetch_messages()
-        return self.success_counter
-
-    def get_fail_counter(self) -> int:
-        self.__fetch_messages()
-        return self.fail_counter
-    
-    def __fetch_messages(self) -> None:
-        if not self.channel.empty():
-            message: str = self.channel.get()
-            self.__handle_message(message)
-
-    # Save the state of the worker thread based on the message
-    from typing import List
-
-    def __handle_message(self, message: List[str]) -> None:
-        if isinstance(message, dict) and "contents" in message:
-            contents = message["contents"]
-        else:
-            return
-
-        if message["type"] == "progress":
-            self.progress = contents[0]
-            self.total = contents[1]
-            self.success_counter = contents[2]
-            self.failure_counter = contents[3]
-
-        elif message["type"] == "song_title":
-            self.current_song = contents
-
-        elif message["type"] == "eta_update":
-            self.eta = contents[1]
-
-        elif message["type"] == "download_complete":
-            self.working = False
-            self.progress = self.total
