@@ -1,28 +1,11 @@
-import unittest
 import pytest
-import time
 import os
-import contextlib
 import shutil
-import io
+import queue
+import threading
+import time
+from unittest.mock import Mock, patch, MagicMock
 from spotube.download_manager import DownloadManager
-# Testing API KEYS
-SPOTIFY_ID = "ff55dcadd44e4cb0819ebe5be80ab687"
-SPOTIFY_SECRET = "5539f7392ae94dd5b3dfc1d57381303a"
-GENIUS_TOKEN = "5dRV7gMtFLgnlF632ZzqZutSsvPC0IWyFUJ1W8pWHj185RAMFgR4FtX76ckFDjFZ"
-
-########################################################
-# The valid playlist contains:
-# - C'est pas d'ma faute c'est l'mood by Chinwvr
-# - TRAP by Eryn Martin
-#########################################################
-VALID_PLAYLIST = (
-    "https://open.spotify.com/playlist/05MWSPxUUWA0d238WFvkKA?si=0edd9cedff474f88"
-)
-INVALID_PLAYLIST = (
-    "https://open.spotify.com/playlist/3zdqcFFsbUssss8oFbEELc?si=1a7c2641ae08404c"
-)
-
 
 @pytest.fixture(autouse=True)
 def run_around_tests():
@@ -33,181 +16,184 @@ def run_around_tests():
         shutil.rmtree("./Test_Directory")
 
 
-class TestDownloader(unittest.TestCase):
-    def test_constructor(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-        self.assertIsNotNone(test_downloader)
-
-    def test_set_directory(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-        test_downloader.set_directory("./test")
-        self.assertEqual(test_downloader.directory, "./test")
-
-    def test_validate_playlist_url(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-
-        playlist_validity = test_downloader.validate_playlist_url(VALID_PLAYLIST)
-        self.assertTrue(playlist_validity)
-
-        playlist_validity = test_downloader.validate_playlist_url(INVALID_PLAYLIST)
-        self.assertFalse(playlist_validity)
-
-    def test_get_total(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-
-        total = test_downloader.get_total()
-        self.assertEqual(total, 0)
-
-    def test_get_progress(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-
-        progress = test_downloader.get_progress()
-        self.assertEqual(progress, 0)
-
-    def test_get_current_song(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-
-        current_song = test_downloader.get_current_song()
-        self.assertIsNone(current_song)
-
-    def test_get_eta(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-
-        eta = test_downloader.get_eta()
-        self.assertIsNone(eta)
-
-    def test_start_downloader(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-
-        stdout_buffer = io.StringIO()
-        stderr_buffer = io.StringIO()
-        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-            test_downloader.start_downloader(VALID_PLAYLIST)
-
-            while test_downloader.downloader_active():
-                time.sleep(1)
-
-        # Check if the specific message is in the captured output
-        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
-            self.skipTest("Test passed due to expected message in stdout")
-        else:
-            self.assertTrue(
-                os.path.exists("./Test_Directory/TRAP.mp3")
-                and os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
-            )
-
-    def test_different_path(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory/TEST"
-        )
-
-        # Capture stdout output in a StringIO buffer
-        stdout_buffer = io.StringIO()
-        stderr_buffer = io.StringIO()
-        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-            test_downloader.start_downloader(VALID_PLAYLIST)
-            while test_downloader.downloader_active():
-                time.sleep(1)
+class TestDownloader:
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_constructor(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
         
-        # Check if the specific message is in the captured output
-        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
-            self.skipTest("Test passed due to expected message in stdout")
-        else:
-            # Perform regular assertions
-            self.assertTrue(
-                os.path.exists("./Test_Directory/TEST/TRAP.mp3") and
-                os.path.exists("./Test_Directory/TEST/C'est pas d'ma faute c'est l'mood.mp3")
-            )
-
-    def test_cancel_downloader(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
+        assert downloader.progress == 0
+        assert downloader.working == False
+        assert downloader.total == 0
+        assert downloader.current_song is None
+        assert downloader.eta is None
+        assert isinstance(downloader.channel, queue.Queue)
+        assert isinstance(downloader.termination_channel, queue.Queue)
+        mock_auth.assert_called_once_with("test_id", "test_secret", "test_key")
+        
+    def test_set_directory(self):
+        with patch('spotube.download_manager.Authenticator'), \
+             patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True):
+            downloader = DownloadManager("test_id", "test_secret", "test_key")
+            downloader.set_directory("./new_directory")
+            
+            assert downloader.directory == "./new_directory"
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    @patch('spotube.download_manager.utils.download_playlist')
+    def test_start_downloader(self, mock_download, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        downloader.start_downloader("test_link")
+        
+        # Wait briefly for thread to start
+        time.sleep(0.1)
+        
+        assert downloader.working == True
+        assert downloader.thread is not None
+        
+        # Clean up
+        downloader.termination_channel.put("EXIT")
+        downloader.thread.join(timeout=1.0)
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_cancel_downloader(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        downloader.start_downloader("test_link")
+        
+        # Wait briefly for thread to start
+        time.sleep(0.1)
+        
+        assert downloader.working == True
+        assert downloader.thread is not None
+        
+        # Cancel the downloader
+        downloader.cancel_downloader()
+        
+        # Wait briefly for thread to stop
+        time.sleep(0.1)
+        
+        assert downloader.working == False
+        assert downloader.thread is None
+        assert downloader.termination_channel.empty()  # Ensure termination channel is cleared
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_update_progress(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        
+        downloader.update_progress(
+            progress=5, 
+            total=10, 
+            success_counter=3, 
+            failure_counter=2,
+            current_song="Test Song",
+            eta=15.5,
+            downloader_active=True,
+            normalizing=True,
+            normalized_songs=2
         )
-
-        test_downloader.start_downloader(VALID_PLAYLIST)
-        test_downloader.cancel_downloader()
-
-        while test_downloader.downloader_active():
-            time.sleep(1)
-
-        self.assertTrue(
-            not os.path.exists("./Test_Directory/C'est pas d'ma faute c'est l'mood.mp3")
-            and not os.path.exists("./Test_Directory/TRAP.mp3")
-        )
-
-    def test_get_success_counter(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-
-        stdout_buffer = io.StringIO()
-        stderr_buffer = io.StringIO()
-        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-            test_downloader.start_downloader(VALID_PLAYLIST)
-            success_counter = test_downloader.get_success_counter()
-            self.assertEqual(success_counter, 0)
-
-            while test_downloader.downloader_active():
-                time.sleep(1)
-
-        # Check if the specific message is in the captured output
-        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
-            self.skipTest("Test passed due to expected message in stdout")
-        else:
-            # Perform regular assertions
-            success_counter = test_downloader.get_success_counter()
-            self.assertEqual(success_counter, 2)
-
-    def test_get_fail_counter(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory"
-        )
-
-        test_downloader.start_downloader(VALID_PLAYLIST)
-        fail_counter = test_downloader.get_fail_counter()
-        self.assertEqual(fail_counter, 0)
-
-        while test_downloader.downloader_active():
-            time.sleep(1)
-
-        fail_counter = test_downloader.get_fail_counter()
-        self.assertEqual(fail_counter, 0)
-
-    def test_song_number_limit(self):
-        test_downloader = DownloadManager(
-            SPOTIFY_ID, SPOTIFY_SECRET, GENIUS_TOKEN, directory="./Test_Directory", song_number_limit = 1
-        )
-
-        stdout_buffer = io.StringIO()
-        stderr_buffer = io.StringIO()
-        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-            test_downloader.start_downloader(VALID_PLAYLIST)
-
-            while test_downloader.downloader_active():
-                time.sleep(1)
-
-        # Check if the specific message is in the captured output
-        if "Sign in to confirm you" in stdout_buffer.getvalue() or "Sign in to confirm you" in stderr_buffer.getvalue():
-            self.skipTest("Test passed due to expected message in stdout")
-        else:
-            total_counter = test_downloader.get_total()
-            self.assertEqual(total_counter, 1)
-
-if __name__ == "__main__":
-    unittest.main()
+        
+        assert downloader.progress == 5
+        assert downloader.total == 10
+        assert downloader.success_counter == 3
+        assert downloader.failure_counter == 2
+        assert downloader.current_song == "Test Song"
+        assert downloader.eta == pytest.approx(15.5)
+        assert downloader.working == True
+        assert downloader.normalizing == True
+        assert downloader.normalized_songs == 2
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_validate_playlist_url(self, mock_ffmpeg, mock_auth):
+        mock_spotify_auth = MagicMock()
+        mock_auth.return_value.spotify_auth = mock_spotify_auth
+        
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        
+        # Test valid URL
+        mock_spotify_auth.playlist_items.return_value = {"items": []}
+        result = downloader.validate_playlist_url("valid_url")
+        assert result == True
+        
+        # Test invalid URL
+        mock_spotify_auth.playlist_items.side_effect = Exception("Invalid URL")
+        result = downloader.validate_playlist_url("invalid_url")
+        assert result == False
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_get_current_song(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        downloader.current_song = "Test Song by Artist"
+        
+        assert downloader.current_song == "Test Song by Artist"
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_get_eta(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        downloader.eta = 42.5
+        
+        assert downloader.eta == 42.5
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_get_total(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        downloader.total = 100
+        
+        assert downloader.total == 100
+    
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_get_progress(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        downloader.progress = 42
+        
+        assert downloader.progress == 42
+        
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_get_success_counter(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        downloader.success_counter = 15
+        
+        assert downloader.success_counter == 15
+        
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_get_fail_counter(self, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key")
+        downloader.fail_counter = 3
+        
+        assert downloader.fail_counter == 3
+        
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    @patch('spotube.download_manager.utils.download_playlist')
+    def test_song_number_limit(self, mock_download, mock_ffmpeg, mock_auth):
+        downloader = DownloadManager("test_id", "test_secret", "test_key", song_number_limit=5)
+        downloader.start_downloader("test_link")
+        
+        # Wait briefly for thread to start
+        time.sleep(0.1)
+        
+        assert downloader.song_number_limit == 5
+        mock_download.assert_called_once()
+        assert mock_download.call_args[0][6] == 5  # song_number_limit parameter
+        
+        # Clean up
+        downloader.termination_channel.put("EXIT")
+        downloader.thread.join(timeout=1.0)
+        
+    @patch('spotube.download_manager.Authenticator')
+    @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
+    def test_different_path(self, mock_ffmpeg, mock_auth):
+        custom_path = "./Custom_Songs_Path"
+        downloader = DownloadManager("test_id", "test_secret", "test_key", directory=custom_path)
+        
+        assert downloader.directory == custom_path

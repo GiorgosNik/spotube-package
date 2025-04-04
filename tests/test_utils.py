@@ -7,7 +7,6 @@ from spotube.downloader_utils import format_artists
 from spotube.downloader_utils import format_song_data
 from spotube.downloader_utils import match_target_amplitude
 from pydub import AudioSegment
-from spotube.downloader_utils import send_message
 from spotube.downloader_utils import _extract_tags
 from spotube.downloader_utils import normalize_volume_levels
 from spotube.downloader_utils import set_tags
@@ -128,19 +127,6 @@ class TestUtils(unittest.TestCase):
         assert result == "normalized_sound"
         mock_sound.apply_gain.assert_called_once_with(6.0)
 
-    def test_send_message(self):
-        mock_channel = Mock()
-        
-        send_message(mock_channel, "test_type", ["test_content"])
-        
-        mock_channel.put.assert_called_once_with({
-            "type": "test_type", 
-            "contents": ["test_content"]
-        })
-
-    def test_send_message_no_channel(self):
-        send_message(None, "test_type", ["test_content"])
-
     def test_extract_tags_with_no_tag(self):
         mock_audio = Mock()
         mock_audio.tag = None
@@ -195,7 +181,7 @@ class TestUtils(unittest.TestCase):
             with open(os.path.join(test_dir, "test_song.mp3"), "w") as f:
                 f.write("dummy mp3 content")
                 
-            normalize_volume_levels(test_dir)
+            normalize_volume_levels(test_dir, 0, 0)
             
             mock_audio_segment.export.assert_called_once()
         

@@ -170,13 +170,6 @@ def get_songs(playlist_link, spotify_api):
             return songs
     return songs
 
-
-# Handle message delivery in UI mode
-def send_message(channel, type, contents):
-    if channel is not None:
-        channel.put({"type": type, "contents": contents})
-
-
 def get_elapsed(progressbar):
     elapsed = progressbar.format_dict["elapsed"]
     return elapsed
@@ -212,15 +205,15 @@ def format_song_data(song):
 
 
 def download_playlist(
-    playlist_url, authenticator, channel, termination_channel, directory, display_bar=True, normalize_sound=True, song_number_limit=0
-):
+    playlist_url, authenticator, termination_channel, directory, display_bar=True, normalize_sound=True, song_number_limit=0
+, progress_callback=None):
     ensure_directory_exists(directory)
     audio_downloader = create_audio_downloader(directory)
     songs = fetch_playlist_songs(playlist_url, authenticator, song_number_limit)
     filename = None if display_bar else open(os.devnull, "w")
     playlist_progress = initialize_progress_bar(len(songs), filename)
-    process_songs(songs, audio_downloader, directory, authenticator, channel, termination_channel, playlist_progress, filename)
-    finalize_download(playlist_progress, channel, directory, normalize_sound)
+    success_counter, failure_counter =  process_songs(songs, audio_downloader, directory, authenticator, termination_channel, playlist_progress, filename, progress_callback)
+    finalize_download(playlist_progress, directory, normalize_sound, success_counter, failure_counter, progress_callback)
 
 def ensure_directory_exists(directory):
     if not os.path.isdir(directory):
@@ -233,27 +226,34 @@ def fetch_playlist_songs(playlist_url, authenticator, song_number_limit):
 def initialize_progress_bar(playlist_size, filename):
     return tqdm(total=playlist_size, desc="Playlist Progress", position=0, leave=False, file=filename)
 
-def process_songs(songs, audio_downloader, directory, authenticator, channel, termination_channel, playlist_progress, filename):
+def process_songs(songs, audio_downloader, directory, authenticator, termination_channel, playlist_progress, filename, progress_callback= None):
     success_counter, failure_counter = 0, 0
     
     for song in songs:
-        if process_single_song(song, audio_downloader, directory, authenticator, channel, filename):
+        if process_single_song(song, audio_downloader, directory, authenticator, filename):
             success_counter += 1
         else:
             failure_counter += 1
+            
+        update_progress(playlist_progress)
+        info_dict = format_song_data(song)
+        current_song = f"{info_dict['name']} by {info_dict['artist'].split(',')[0]}"
+        eta = get_eta(playlist_progress)
         
-        update_progress(playlist_progress, channel, success_counter, failure_counter)
+        if(progress_callback):
+            progress_callback(playlist_progress.n, playlist_progress.total ,success_counter, failure_counter, current_song, eta, True, False, 0)
         
         if check_termination(termination_channel):
             return success_counter, failure_counter
-    
+        
+    if(progress_callback):
+            progress_callback(playlist_progress.n, playlist_progress.total, success_counter, failure_counter, current_song, eta, True, False, 0)
     return success_counter, failure_counter
 
-def process_single_song(song, audio_downloader, directory, authenticator, channel, filename):
+def process_single_song(song, audio_downloader, directory, authenticator,filename):
     song_progress = initialize_song_progress(song, filename)
     info_dict = retrieve_song_info(song, song_progress)
     download_image(info_dict, directory)
-    notify_ui(channel, info_dict)
     
     link = get_link(info_dict)
     if not link:
@@ -273,9 +273,6 @@ def retrieve_song_info(song, song_progress):
     song_progress.set_description(f"{song_progress.desc}: Formatting Information")
     song_progress.update(n=1)
     return format_song_data(song)
-
-def notify_ui(channel, info_dict):
-    send_message(channel, type="song_title", contents=f"{info_dict['name']} by {info_dict['artist'].split(',')[0]}")
 
 def download_and_process_song(link, info_dict, audio_downloader, directory, authenticator, song_progress):
     try:
@@ -307,22 +304,18 @@ def move_song_to_folder(info_dict, song_progress):
     song_progress.set_description(f"{info_dict['name']}: Moving to designated folder")
     song_progress.update(n=1)
 
-def update_progress(playlist_progress, channel, success_counter, failure_counter):
+def update_progress(playlist_progress):
     playlist_progress.update(n=1)
-    send_message(channel, type="progress", contents=[playlist_progress.n, playlist_progress.total, success_counter, failure_counter])
-    elapsed, eta = get_elapsed(playlist_progress), get_eta(playlist_progress)
-    send_message(channel, type="eta_update", contents=[elapsed, eta])
 
 def check_termination(termination_channel):
     if not termination_channel.empty():
         return termination_channel.get() == "EXIT"
     return False
 
-def finalize_download(playlist_progress, channel, directory, normalize_sound):
+def finalize_download(playlist_progress, directory, normalize_sound, success_counter, failure_counter, progress_callback=None):
     if normalize_sound:
-        normalize_volume_levels(directory)
+        normalize_volume_levels(directory, success_counter, failure_counter, progress_callback)
     playlist_progress.close()
-    send_message(channel, type="download_complete", contents=[])
 
 # Create downloader object, pass options
 def create_audio_downloader(directory: str) -> YoutubeDL:
@@ -415,7 +408,7 @@ def _save_images(directory: str, audio_file, tags: dict) -> None:
     except Exception as e:  #pragma: no cover
         logging.error(f"Error saving images: {e}")
 
-def normalize_volume_levels(directory: str) -> None:
+def normalize_volume_levels(directory: str, success_counter, failure_counter, progress_callback=None) -> None:
     if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
         print("WARNING: ffmpeg not found in PATH, volume normalization skipped.")
         return
@@ -429,8 +422,13 @@ def normalize_volume_levels(directory: str) -> None:
     normalization_progress: tqdm = tqdm(
         total=len(files), desc="Normalizing Sound", position=0, leave=False
     )
-    
+ 
+    processed_files = 0
     for file in files:
+        if progress_callback:
+            eta = get_eta(normalization_progress)
+            progress_callback(normalization_progress.n, normalization_progress.total,success_counter, failure_counter, file, eta, True, True, processed_files)
+                    
         file_path = os.path.join(abs_path, file)
 
         # Load original tags and save images
@@ -446,3 +444,4 @@ def normalize_volume_levels(directory: str) -> None:
         # Restore tags
         _restore_audio_tags(file_path, tags)
         normalization_progress.update(n=1)
+        processed_files += 1
