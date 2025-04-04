@@ -12,7 +12,7 @@ cleo==2.1.0
 colorama==0.4.6
 coverage==5.5
 crashtest==0.4.1
-cryptography==44.0.0
+cryptography==44.0.1
 deprecation==2.1.0
 distlib==0.3.9
 dulwich==0.22.7

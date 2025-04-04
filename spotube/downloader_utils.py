@@ -241,13 +241,13 @@ def process_songs(songs, audio_downloader, directory, authenticator, termination
         eta = get_eta(playlist_progress)
         
         if(progress_callback):
-            progress_callback(playlist_progress.n, playlist_progress.total ,success_counter, failure_counter, current_song, eta, True, False, 0),
+            progress_callback(playlist_progress.n, playlist_progress.total ,success_counter, failure_counter, current_song, eta, True, False, 0)
         
         if check_termination(termination_channel):
             return success_counter, failure_counter
         
     if(progress_callback):
-            progress_callback(playlist_progress.n, playlist_progress.total, success_counter, failure_counter, current_song, eta, True, False, 0),
+            progress_callback(playlist_progress.n, playlist_progress.total, success_counter, failure_counter, current_song, eta, True, False, 0)
     return success_counter, failure_counter
 
 def process_single_song(song, audio_downloader, directory, authenticator,filename):
@@ -427,7 +427,7 @@ def normalize_volume_levels(directory: str, success_counter, failure_counter, pr
     for file in files:
         if progress_callback:
             eta = get_eta(normalization_progress)
-            progress_callback(normalization_progress.n, normalization_progress.total,success_counter, failure_counter, file, eta, True, True, processed_files),
+            progress_callback(normalization_progress.n, normalization_progress.total,success_counter, failure_counter, file, eta, True, True, processed_files)
                     
         file_path = os.path.join(abs_path, file)
 
