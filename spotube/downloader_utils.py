@@ -226,28 +226,54 @@ def fetch_playlist_songs(playlist_url, authenticator, song_number_limit):
 def initialize_progress_bar(playlist_size, filename):
     return tqdm(total=playlist_size, desc="Playlist Progress", position=0, leave=False, file=filename)
 
-def process_songs(songs, audio_downloader, directory, authenticator, termination_channel, playlist_progress, filename, progress_callback= None):
+def process_songs(
+    songs,
+    audio_downloader,
+    directory,
+    authenticator,
+    termination_channel,
+    playlist_progress,
+    filename,
+    progress_callback=None,
+):
     success_counter, failure_counter = 0, 0
-    
+
+    def report_progress(current_song, eta):
+        if progress_callback:
+            progress_callback(
+                playlist_progress.n,
+                playlist_progress.total,
+                success_counter,
+                failure_counter,
+                current_song,
+                eta,
+                True,
+                False,
+                0,
+            )
+
     for song in songs:
-        if process_single_song(song, audio_downloader, directory, authenticator, filename):
-            success_counter += 1
-        else:
-            failure_counter += 1
-            
-        update_progress(playlist_progress)
         info_dict = format_song_data(song)
         current_song = f"{info_dict['name']} by {info_dict['artist'].split(',')[0]}"
         eta = get_eta(playlist_progress)
-        
-        if(progress_callback):
-            progress_callback(playlist_progress.n, playlist_progress.total ,success_counter, failure_counter, current_song, eta, True, False, 0)
-        
+
+        report_progress(current_song, eta)
+
+        if process_single_song(
+            song, audio_downloader, directory, authenticator, filename
+        ):
+            success_counter += 1
+        else:
+            failure_counter += 1
+
+        update_progress(playlist_progress)
+
+        report_progress(current_song, eta)
+
         if check_termination(termination_channel):
             return success_counter, failure_counter
-        
-    if(progress_callback):
-            progress_callback(playlist_progress.n, playlist_progress.total, success_counter, failure_counter, current_song, eta, True, False, 0)
+
+    report_progress(current_song, eta)
     return success_counter, failure_counter
 
 def process_single_song(song, audio_downloader, directory, authenticator,filename):
