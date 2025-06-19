@@ -1,4 +1,7 @@
+import json
 import os
+import subprocess
+import sys
 from youtubesearchpython import VideosSearch
 import eyed3
 import requests
@@ -82,6 +85,14 @@ def set_tags(song_info, genius_obj, directory):
 
     audio_file.tag.save()
     os.remove(cover_photo_path)
+    
+def mark_song_as_compressed(file_path: str) -> None:
+    audio_file = eyed3.load(file_path)
+    if audio_file.tag is None:
+        logging.error(f"Song: {file_path} does not have a tag, cannot mark as compressed")
+        return
+    audio_file.tag.comments.set("compressed")
+    audio_file.tag.save()
 
 
 def format_artists(artist_list):
@@ -204,16 +215,16 @@ def format_song_data(song):
     return info_dict
 
 
-def download_playlist(
-    playlist_url, authenticator, termination_channel, directory, display_bar=True, normalize_sound=True, song_number_limit=0
-, progress_callback=None):
+def download_playlist(playlist_url, authenticator, termination_channel, directory, display_bar=True, normalize_sound=True, song_number_limit=0, progress_callback=None):
     ensure_directory_exists(directory)
     audio_downloader = create_audio_downloader(directory)
     songs = fetch_playlist_songs(playlist_url, authenticator, song_number_limit)
     filename = None if display_bar else open(os.devnull, "w")
     playlist_progress = initialize_progress_bar(len(songs), filename)
     success_counter, failure_counter =  process_songs(songs, audio_downloader, directory, authenticator, termination_channel, playlist_progress, filename, progress_callback)
-    finalize_download(playlist_progress, directory, normalize_sound, success_counter, failure_counter, progress_callback)
+    if normalize_sound:
+        normalize_volume_levels(directory, success_counter, failure_counter, progress_callback)
+    playlist_progress.close()
 
 def ensure_directory_exists(directory):
     if not os.path.isdir(directory):
@@ -338,11 +349,6 @@ def check_termination(termination_channel):
         return termination_channel.get() == "EXIT"
     return False
 
-def finalize_download(playlist_progress, directory, normalize_sound, success_counter, failure_counter, progress_callback=None):
-    if normalize_sound:
-        normalize_volume_levels(directory, success_counter, failure_counter, progress_callback)
-    playlist_progress.close()
-
 # Create downloader object, pass options
 def create_audio_downloader(directory: str) -> YoutubeDL:
     if not DependencyHandler.ffmpeg_installed(): #pragma: no cover
@@ -443,7 +449,7 @@ def normalize_volume_levels(directory: str, success_counter, failure_counter, pr
         raise ValueError("Invalid directory")
 
     abs_path: str = os.path.abspath(directory)
-    files: list = [f for f in os.listdir(directory) if f.endswith(".mp3")]
+    files: list = [f for f in os.listdir(directory) if f.endswith(".mp3") and not is_song_processed(os.path.join(abs_path, f))]
 
     normalization_progress: tqdm = tqdm(
         total=len(files), desc="Normalizing Sound", position=0, leave=False
@@ -469,5 +475,34 @@ def normalize_volume_levels(directory: str, success_counter, failure_counter, pr
 
         # Restore tags
         _restore_audio_tags(file_path, tags)
+        mark_song_as_compressed(file_path)
         normalization_progress.update(n=1)
         processed_files += 1
+        
+def is_song_processed(file_path):
+    try:
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_format",
+            "-show_streams",
+            "-print_format",
+            "json",
+            file_path,
+        ]
+        result = run_subprocess_with_flags(cmd, capture_output=True, text=True)
+        metadata = json.loads(result.stdout)
+        song_tags = metadata.get("format", {}).get("tags", {})
+        return song_tags.get("comment") == "compressed"
+    except Exception as e:
+        logging.error(
+            f"Error while parsing metadata for song:{file_path}. ERROR MESSAGE: {e}"
+        )
+        return False
+    
+def run_subprocess_with_flags(cmd, **kwargs):
+    if sys.platform == "win32": #pragma: no cover
+        kwargs["encoding"] = "utf-8"
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return subprocess.run(cmd, **kwargs)
