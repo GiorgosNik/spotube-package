@@ -479,6 +479,10 @@ def normalize_volume_levels(directory: str, success_counter, failure_counter, pr
         normalization_progress.update(n=1)
         processed_files += 1
         
+    if progress_callback:
+        eta = get_eta(normalization_progress)
+        progress_callback(normalization_progress.n, normalization_progress.total,success_counter, failure_counter, file, eta, True, True, processed_files)
+        
 def is_song_processed(file_path):
     try:
         cmd = [
