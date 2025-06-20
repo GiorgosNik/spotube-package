@@ -160,29 +160,35 @@ class TestUtils(unittest.TestCase):
         
         assert result == expected
     
-    def test_normalize_volume_levels(self):
+    @patch('spotube.downloader_utils.eyed3.load')
+    @patch('spotube.downloader_utils.create_audio_downloader')
+    def test_normalize_volume_levels(self, mock_create_audio_downloader, mock_eyed3_load):
         test_dir = "./Test_Directory"
         os.makedirs(test_dir, exist_ok=True)
-        
+
         mock_audio_segment = Mock(spec=AudioSegment)
         mock_audio_segment.dBFS = -20.0
         mock_audio_segment.export.return_value = None
-        
+        mock_comments = Mock()
+        mock_tag = Mock()
+        mock_tag.comments = mock_comments
+        mock_audio_file = Mock()
+        mock_audio_file.tag = mock_tag
+        mock_eyed3_load.return_value = mock_audio_file
+
         with unittest.mock.patch('spotube.downloader_utils.AudioSegment.from_file', 
                                 return_value=mock_audio_segment), \
-             unittest.mock.patch('spotube.downloader_utils.match_target_amplitude', 
-                               return_value=mock_audio_segment), \
-             unittest.mock.patch('spotube.downloader_utils._extract_tags', 
-                               return_value={"artist": "Test", "title": "Song", "album": "Album", "lyrics": "", "images": []}), \
-             unittest.mock.patch('spotube.downloader_utils._restore_audio_tags'), \
-             unittest.mock.patch('spotube.downloader_utils._save_images'), \
-             unittest.mock.patch('spotube.downloader_utils.DependencyHandler.ffmpeg_installed', return_value=True):
-            
+            unittest.mock.patch('spotube.downloader_utils.match_target_amplitude', 
+                                return_value=mock_audio_segment), \
+            unittest.mock.patch('spotube.downloader_utils._extract_tags', 
+                                return_value={"artist": "Test", "title": "Song", "album": "Album", "lyrics": "", "images": []}), \
+            unittest.mock.patch('spotube.downloader_utils._restore_audio_tags'), \
+            unittest.mock.patch('spotube.downloader_utils._save_images'), \
+            unittest.mock.patch('spotube.downloader_utils.DependencyHandler.ffmpeg_installed', return_value=True):
+
             with open(os.path.join(test_dir, "test_song.mp3"), "w") as f:
                 f.write("dummy mp3 content")
-                
             normalize_volume_levels(test_dir, 0, 0)
-            
             mock_audio_segment.export.assert_called_once()
         
     def test_set_tags_success(self):

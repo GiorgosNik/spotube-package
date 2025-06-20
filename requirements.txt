@@ -56,7 +56,7 @@ pycryptodomex==3.21.0
 pydub==0.25.1
 pyproject_hooks==1.2.0
 pyrsistent==0.20.0
-pytest==8.3.4
+pytest==7.4.4
 pywin32-ctypes==0.2.3
 RapidFuzz==3.11.0
 redis==5.2.1
@@ -81,5 +81,5 @@ virtualenv==20.28.1
 webencodings==0.5.1
 websockets==14.1
 youtube-search-python==1.6.6
-yt-dlp==2025.2.19
+yt-dlp==2025.6.9
 zipp==3.21.0
