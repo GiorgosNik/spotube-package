@@ -39,12 +39,6 @@ class DownloadManager:
         self.normalized_songs = 0
         self.song_number_limit = song_number_limit
 
-        # Set the channel that will handle the messages from the worker
-        self.channel = queue.Queue()
-
-        # Set the channel that will handle the messages from the worker
-        self.termination_channel = queue.Queue()
-
         self.authenticator = Authenticator(
             spotify_client_id, spotify_client_secret, genius_api_key
         )
@@ -84,7 +78,6 @@ class DownloadManager:
             args=(
                 link,
                 self.authenticator,
-                self.termination_channel,
                 self.directory,
                 self.display_bar,
                 self.normalize_sound,
@@ -106,10 +99,8 @@ class DownloadManager:
         self.thread.start()
 
     def cancel_downloader(self) -> None:
-        self.termination_channel.put("EXIT")
-
         # Kill Thread
-        if not self.thread.is_alive():
+        if self.thread is None or not self.thread.is_alive():
             return
         tid = ctypes.c_long(self.thread.ident)
         res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
@@ -125,8 +116,6 @@ class DownloadManager:
         self.current_song = None
         self.eta = None
         self.thread = None
-        self.channel = queue.Queue()
-        self.termination_channel = queue.Queue()
         self.success_counter = 0
         self.fail_counter = 0
         self.normalizing = False
