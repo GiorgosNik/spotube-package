@@ -28,8 +28,6 @@ class TestDownloader:
         assert downloader.total == 0
         assert downloader.current_song is None
         assert downloader.eta is None
-        assert isinstance(downloader.channel, queue.Queue)
-        assert isinstance(downloader.termination_channel, queue.Queue)
         mock_auth.assert_called_once_with("test_id", "test_secret", "test_key")
         
     def test_set_directory(self):
@@ -54,7 +52,6 @@ class TestDownloader:
         assert downloader.thread is not None
         
         # Clean up
-        downloader.termination_channel.put("EXIT")
         downloader.thread.join(timeout=1.0)
     
     @patch('spotube.download_manager.Authenticator')
@@ -77,7 +74,6 @@ class TestDownloader:
         
         assert downloader.working == False
         assert downloader.thread is None
-        assert downloader.termination_channel.empty()  # Ensure termination channel is cleared
     
     @patch('spotube.download_manager.Authenticator')
     @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
@@ -90,7 +86,7 @@ class TestDownloader:
             success_counter=3, 
             failure_counter=2,
             current_song="Test Song",
-            eta=15.5,
+            eta="15.5",
             downloader_active=True,
             normalizing=True,
             normalized_songs=2
@@ -101,7 +97,7 @@ class TestDownloader:
         assert downloader.success_counter == 3
         assert downloader.failure_counter == 2
         assert downloader.current_song == "Test Song"
-        assert downloader.eta == pytest.approx(15.5)
+        assert downloader.eta == "15.5"
         assert downloader.working == True
         assert downloader.normalizing == True
         assert downloader.normalized_songs == 2
@@ -138,7 +134,7 @@ class TestDownloader:
         downloader = DownloadManager("test_id", "test_secret", "test_key")
         downloader.eta = 42.5
         
-        assert downloader.eta == 42.5
+        assert downloader.eta == pytest.approx(42.5)
     
     @patch('spotube.download_manager.Authenticator')
     @patch('spotube.download_manager.DependencyHandler.ffmpeg_installed', return_value=True)
@@ -184,10 +180,9 @@ class TestDownloader:
         
         assert downloader.song_number_limit == 5
         mock_download.assert_called_once()
-        assert mock_download.call_args[0][6] == 5  # song_number_limit parameter
+        assert mock_download.call_args[0][5] == 5  # song_number_limit parameter
         
         # Clean up
-        downloader.termination_channel.put("EXIT")
         downloader.thread.join(timeout=1.0)
         
     @patch('spotube.download_manager.Authenticator')

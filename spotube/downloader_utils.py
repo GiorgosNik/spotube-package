@@ -215,13 +215,13 @@ def format_song_data(song):
     return info_dict
 
 
-def download_playlist(playlist_url, authenticator, termination_channel, directory, display_bar=True, normalize_sound=True, song_number_limit=0, progress_callback=None):
+def download_playlist(playlist_url, authenticator, directory, display_bar=True, normalize_sound=True, song_number_limit=0, progress_callback=None):
     ensure_directory_exists(directory)
     audio_downloader = create_audio_downloader(directory)
     songs = fetch_playlist_songs(playlist_url, authenticator, song_number_limit)
     filename = None if display_bar else open(os.devnull, "w")
     playlist_progress = initialize_progress_bar(len(songs), filename)
-    success_counter, failure_counter =  process_songs(songs, audio_downloader, directory, authenticator, termination_channel, playlist_progress, filename, progress_callback)
+    success_counter, failure_counter =  process_songs(songs, audio_downloader, directory, authenticator, playlist_progress, filename, progress_callback)
     if normalize_sound:
         normalize_volume_levels(directory, success_counter, failure_counter, progress_callback)
     playlist_progress.close()
@@ -242,7 +242,6 @@ def process_songs(
     audio_downloader,
     directory,
     authenticator,
-    termination_channel,
     playlist_progress,
     filename,
     progress_callback=None,
@@ -280,9 +279,6 @@ def process_songs(
         update_progress(playlist_progress)
 
         report_progress(current_song, eta)
-
-        if check_termination(termination_channel):
-            return success_counter, failure_counter
 
     report_progress(current_song, eta)
     return success_counter, failure_counter
@@ -343,11 +339,6 @@ def move_song_to_folder(info_dict, song_progress):
 
 def update_progress(playlist_progress):
     playlist_progress.update(n=1)
-
-def check_termination(termination_channel):
-    if not termination_channel.empty():
-        return termination_channel.get() == "EXIT"
-    return False
 
 # Create downloader object, pass options
 def create_audio_downloader(directory: str) -> YoutubeDL:
