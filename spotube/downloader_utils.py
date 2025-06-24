@@ -248,7 +248,7 @@ def process_songs(
 ):
     success_counter, failure_counter = 0, 0
 
-    def report_progress(current_song, eta):
+    def report_progress(current_song, eta, working = True):
         if progress_callback:
             progress_callback(
                 playlist_progress.n,
@@ -257,7 +257,7 @@ def process_songs(
                 failure_counter,
                 current_song,
                 eta,
-                True,
+                working,
                 False,
                 0,
             )
@@ -280,7 +280,7 @@ def process_songs(
 
         report_progress(current_song, eta)
 
-    report_progress(current_song, eta)
+    report_progress(current_song, eta, working=False)
     return success_counter, failure_counter
 
 def process_single_song(song, audio_downloader, directory, authenticator,filename):
