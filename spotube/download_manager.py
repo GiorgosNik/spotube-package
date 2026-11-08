@@ -1,23 +1,24 @@
 import ctypes
 import threading
-import queue
-from . import downloader_utils as utils
-import os
-import shutil
+
+from spotube import downloader_utils as utils
+from spotube import exportify, spotify_embed
 from spotube.authenticator import Authenticator
-from spotube.dependency_handler import DependencyHandler
+
+CANCEL_TIMEOUT_SECONDS = 30
 
 
 class DownloadManager:
     def __init__(
         self,
-        spotify_client_id: str,
-        spotify_client_secret: str,
-        genius_api_key: str,
+        spotify_client_id: str | None = None,
+        spotify_client_secret: str | None = None,
+        genius_api_key: str | None = None,
         directory: str = "./Songs",
         display_bar: bool = True,
         normalize_sound: bool = True,
         song_number_limit: int = 0,
+        use_exportify: bool = True,
     ) -> None:
 
         # Initialise the tracking values
@@ -34,17 +35,15 @@ class DownloadManager:
         self.display_bar = display_bar
         self.normalize_sound = normalize_sound
         self.success_counter = 0
-        self.fail_counter = 0
+        self.failure_counter = 0
         self.normalizing = False
         self.normalized_songs = 0
         self.song_number_limit = song_number_limit
+        self.use_exportify = use_exportify
 
         self.authenticator = Authenticator(
             spotify_client_id, spotify_client_secret, genius_api_key
         )
-
-        if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
-            DependencyHandler.download_ffmpeg(os_type=os.name)
 
     def update_progress(
         self,
@@ -72,7 +71,8 @@ class DownloadManager:
         self.directory = directory
 
     def start_downloader(self, link: str) -> None:
-        # Create a new thread to handle the download
+        if not utils.ffmpeg_installed():
+            raise utils.FFmpegNotFoundError(utils.FFMPEG_MISSING_MESSAGE)
         self.thread = threading.Thread(
             target=utils.download_playlist,
             args=(
@@ -94,6 +94,7 @@ class DownloadManager:
                     normalized_songs
                 ),
             ),
+            kwargs={"use_exportify": self.use_exportify},
         )
         self.working = True
         self.thread.start()
@@ -109,6 +110,7 @@ class DownloadManager:
         if res > 1:
             ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, None)
             raise RuntimeError("Failed to kill thread")
+        self.thread.join(timeout=CANCEL_TIMEOUT_SECONDS)
 
         self.working = False
         self.progress = 0
@@ -117,18 +119,26 @@ class DownloadManager:
         self.eta = None
         self.thread = None
         self.success_counter = 0
-        self.fail_counter = 0
+        self.failure_counter = 0
         self.normalizing = False
         self.normalized_songs = 0
 
-        if os.path.isdir(self.directory):
-            shutil.rmtree(self.directory)
+        utils.remove_partial_files(self.directory)
+
+    def login_exportify(self) -> None:
+        exportify.login()
 
     def validate_playlist_url(self, playlist_url: str) -> bool:
+        if self.authenticator.spotify_auth is not None:
+            try:
+                self.authenticator.spotify_auth.playlist_items(
+                    playlist_url, additional_types=("track",)
+                )
+                return True
+            except Exception:
+                pass
         try:
-            self.authenticator.spotify_auth.playlist_items(
-                playlist_url, additional_types=("track",)
-            )
+            spotify_embed.fetch_embed_entity("playlist", spotify_embed.parse_playlist_id(playlist_url))
         except Exception:
             return False
         return True

@@ -1,110 +1,166 @@
 name: build
 
-on: push
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test_windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-
-      - name: Install Project dependencies
-        uses: py-actions/py-dependency-install@v4
-
-      - uses: FedericoCarboni/setup-ffmpeg@v3
-        id: setup-ffmpeg
-        with:
-          ffmpeg-version: release
-          github-token: ${{ github.server_url == 'https://github.com' && github.token || '' }}
-
-      - name: Install testing dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pylint pytest pytest-cov selenium playwright
-
-      - name: Running pytest
-        run: |
-          pytest -v  --cov --cov-report=xml --cov-report=html --junitxml="xunit-result.xml"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: code-coverage-win
-          path: htmlcov
-          
-  build:
-    needs: test_windows
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Ruff
+        run: uvx pre-commit run ruff-check --all-files --show-diff-on-failure
+      - name: Lockfile matches pyproject.toml
+        run: uvx poetry check --lock
 
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }}, ${{ matrix.resolution }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+        resolution: [highest]
+        include:
+          - { os: ubuntu-latest, python: "3.11", resolution: lowest-direct }
+          - { os: windows-latest, python: "3.11", resolution: lowest-direct }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
+          github-token: ${{ github.token }}
+
+      - name: Install package and test tools
+        run: uv pip install --system --resolution ${{ matrix.resolution }} -e ".[exportify]" --group dev
+
+      - name: Run tests
+        run: python -m pytest -v -rs --cov --cov-report=xml --cov-report=term --junitxml=xunit-result.xml
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        with:
+          name: coverage
+          path: |
+            coverage.xml
+            xunit-result.xml
+
+  build:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Take version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Tag must look like v1.2.3, got $GITHUB_REF_NAME"; exit 1; fi
+          sed -i "s/^version = \".*\"/version = \"$version\"/" pyproject.toml
+          grep -q "^version = \"$version\"" pyproject.toml
+
+      - name: Build
+        run: uv build
+
+      - name: Check package metadata
+        run: uvx twine check --strict dist/*
+
+      - name: Smoke test the built wheel in a clean environment
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv venv /tmp/smoke
+          uv pip install --python /tmp/smoke/bin/python "$wheel"
+          /tmp/smoke/bin/python -c "from spotube import DownloadManager; DownloadManager(directory='/tmp/songs')"
+          /tmp/smoke/bin/spotube --version
+          code=0; /tmp/smoke/bin/spotube download https://example.com/not-a-playlist || code=$?; test "$code" -eq 2
+          uv pip install --python /tmp/smoke/bin/python "${wheel}[exportify]"
+          /tmp/smoke/bin/python -c "import playwright.sync_api; from spotube import exportify; assert exportify.is_available()"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+
+  live:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
       - name: Install ffmpeg
-        run: |
-          sudo apt install software-properties-common
-          sudo apt update
-          sudo add-apt-repository ppa:jonathonf/ffmpeg-4
-          sudo apt install ffmpeg
-
-      - name: Install jq
-        run: |
-          sudo apt install jq
-
-      - name: Install Project dependencies
-        uses: py-actions/py-dependency-install@v4
-
-      - name: Install testing dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pylint pytest pytest-cov
-
-      - name: Running pytest
-        run: |
-          pytest -v  --cov --cov-report=xml --cov-report=html --junitxml="xunit-result.xml"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: code-coverage
-          path: htmlcov
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install package and test tools
+        run: uv pip install --system -e ".[exportify]" --group dev
+      - name: Check external services still behave as expected
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GENIUS_ACCESS_TOKEN: ${{ secrets.GENIUS_ACCESS_TOKEN }}
+        run: python -m pytest -v -rs --live -m live
 
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/python-3.10@master
+  analysis:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: coverage
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Snyk dependency monitor
+        continue-on-error: true
+        uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: monitor
-
-      - name: Run poetry image
-        uses: abatilo/actions-poetry@v2
-        with:
-          poetry-version: 1.4.0
-
-      - name: Build and publish patch with poetry
-        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v')
-        run: |
-          version=$(curl -s 'https://pypi.org/pypi/spotube/json' | jq -r '.info.version')
-          poetry version $version
-          poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
-          poetry version patch
-          poetry build
-          poetry publish
-
-      - name: Build and publish minor with poetry
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          version=$(curl -s 'https://pypi.org/pypi/spotube/json' | jq -r '.info.version')
-          poetry version $version
-          poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
-          poetry version minor
-          poetry build
-          poetry publish

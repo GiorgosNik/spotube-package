@@ -1,26 +1,65 @@
-[tool.poetry]
+[project]
 name = "spotube"
-version = "0.1.0"
+version = "0.5.29"
 description = "A Python package to download Spotify playlists locally including the cover art, metadata and lyrics by leveraging the Spotify, YouTube and Genius APIs."
-authors = ["GiorgosNik <giorgosnl17@gmail.com>"]
-license = "Free for non-commercial use"
+authors = [{ name = "GiorgosNik", email = "giorgosnl17@gmail.com" }]
+license = "LicenseRef-Spotube-NonCommercial"
+license-files = ["LICENSE"]
 readme = "README.md"
-repository = 'https://github.com/GiorgosNik/spotube-package'
-packages = [{include = "spotube"}]
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "eyed3>=0.9.9,<0.10",
+    "lyricsgenius>=3.15.0,<4",
+    "requests>=2.32.0,<3",
+    "spotipy>=2.26.0,<3",
+    "tqdm>=4.67.0,<5",
+    "yt-dlp>=2026.10.26",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-eyed3 = "^0.9.7"
-lyricsgenius = "^3.0.1"
-pydub = "^0.25.1"
-pytest = "^7.2.2"
-requests = "^2.28.2"
-spotipy = "^2.22.1"
-tqdm = "^4.65.0"
-youtube-search-python = "^1.6.6"
-yt-dlp = "^2025.3.21"
+[project.optional-dependencies]
+exportify = ["playwright>=1.64.1"]
 
+[project.scripts]
+spotube = "spotube.cli:main"
+
+[project.urls]
+Repository = "https://github.com/GiorgosNik/spotube-package"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=7.0",
+    "pytest-socket>=0.7",
+    "ruff>=0.12",
+]
+
+[tool.poetry]
+packages = [{ include = "spotube" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--disable-socket --allow-unix-socket"
+markers = [
+    "live: calls real external services; run with --live",
+    "ffmpeg: needs ffmpeg on PATH; skipped when it is missing",
+]
+
+[tool.coverage.run]
+source = ["spotube"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "UP", "I"]
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0"]
 build-backend = "poetry.core.masonry.api"
