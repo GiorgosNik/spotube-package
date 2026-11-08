@@ -1,30 +1,95 @@
-import json
+import contextlib
+import logging
+import math
+import mimetypes
 import os
+import re
+import shutil
 import subprocess
 import sys
-from youtubesearchpython import VideosSearch
+from pathlib import Path
+from typing import NamedTuple
+
 import eyed3
 import requests
+from spotipy.exceptions import SpotifyException
+from spotipy.oauth2 import SpotifyOauthError
 from tqdm import tqdm
 from yt_dlp import YoutubeDL
-from pydub import AudioSegment
-from pathlib import Path
-from spotube.dependency_handler import DependencyHandler
-import logging
-import io
-import mimetypes
-import contextlib
 
-class RateLimiterException(Exception):
-    pass
+from spotube import exportify, spotify_embed
 
-throttling_messages = ["This content isn't available, try again later.", "Sign in to confirm you"]
-
-# Setup logging configuration
-logging.basicConfig(filename='errors.log', level=logging.ERROR,
-                    format='%(asctime)s:%(levelname)s:%(message)s')
+logger = logging.getLogger(__name__)
 
 COVER_PHOTO = "/cover_photo.jpg"
+DOWNLOADED_SONG = "downloaded_song.mp3"
+DOWNLOAD_ATTEMPTS = 4
+ERROR_LOG = "errors.log"
+TARGET_LOUDNESS_DBFS = -14.0
+NORMALIZED_BITRATE = "192k"
+NORMALIZED_MARKER = "compressed"
+MEAN_VOLUME_PATTERN = re.compile(r"mean_volume:\s*(-?[\d.]+|-inf) dB")
+FFMPEG_MISSING_MESSAGE = (
+    "ffmpeg and ffprobe were not found on PATH. Install ffmpeg (Windows: winget install ffmpeg, "
+    "macOS: brew install ffmpeg, Debian/Ubuntu: sudo apt install ffmpeg) and try again."
+)
+SEPARATOR_CHARS = re.compile(r"[/\\|]")
+INVALID_FILENAME_CHARS = re.compile(r'[<>:"?*\x00-\x1f]')
+WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+MAX_FILENAME_LENGTH = 150
+PARTIAL_FILE_PATTERNS = ("downloaded_song.*", "cover_photo.jpg", "*.normalizing.mp3")
+
+
+class DownloadResult(NamedTuple):
+    total: int
+    success: int
+    failure: int
+
+
+class FFmpegNotFoundError(RuntimeError):
+    pass
+
+
+def ffmpeg_installed():
+    return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+
+def configure_error_log(path=ERROR_LOG):
+    package_logger = logging.getLogger("spotube")
+    if package_logger.handlers:
+        return
+    handler = logging.FileHandler(path, delay=True, encoding="utf-8")
+    handler.setLevel(logging.WARNING)
+    handler.setFormatter(logging.Formatter("%(asctime)s:%(levelname)s:%(message)s"))
+    package_logger.addHandler(handler)
+
+
+def safe_filename(name):
+    cleaned = " ".join(SEPARATOR_CHARS.sub("-", name).split())
+    cleaned = " ".join(INVALID_FILENAME_CHARS.sub("", cleaned).split())[:MAX_FILENAME_LENGTH].strip(" .")
+    if not cleaned:
+        return "Untitled"
+    if cleaned.split(".")[0].upper() in WINDOWS_RESERVED_NAMES:
+        cleaned += "_"
+    return cleaned
+
+
+def song_path(directory, song_info):
+    primary_artist = (song_info.get("artist") or "").split(",")[0].strip()
+    name = f"{primary_artist} - {song_info['name']}" if primary_artist else song_info["name"]
+    return os.path.join(directory, safe_filename(name) + ".mp3")
+
+
+def remove_partial_files(directory):
+    if not os.path.isdir(directory):
+        return
+    for pattern in PARTIAL_FILE_PATTERNS:
+        for path in Path(directory).glob(pattern):
+            try:
+                path.unlink()
+            except OSError as e:
+                logger.error(f"Could not remove partial file {path}: {e}")
+
 
 def get_lyrics(name_search, artist_search, genius_obj):
     sep1 = "ft."
@@ -36,25 +101,23 @@ def get_lyrics(name_search, artist_search, genius_obj):
     name_search = name_search.split(sep2)[0]
     name_search = name_search.split(sep3)[0]
     name_search = name_search.split(sep4)[0]
-    name_search = name_search.split(sep5)[0]
-    genius_song = genius_obj.search_song(name_search, artist_search)
+    name_search = name_search.split(sep5)[0].strip()
 
-    if(genius_song is None):
-        return None
-    formatted_lyrics = genius_song.lyrics.rsplit(" ", 1)[0].replace("EmbedShare", "")
-    formatted_lyrics = formatted_lyrics.rsplit(" ", 1)[0] + "".join(
-        [i for i in formatted_lyrics.rsplit(" ", 1)[1] if not i.isdigit()]
-    )
-    return formatted_lyrics
+    primary_artist = artist_search.split(",")[0].strip()
+    for artist in dict.fromkeys([primary_artist, artist_search.strip()]):
+        genius_song = genius_obj.search_song(name_search, artist)
+        if genius_song is not None and genius_song.lyrics:
+            return genius_song.lyrics.strip()
+    return None
 
 def set_tags(song_info, genius_obj, directory):
-    audio_file = eyed3.load(directory + "/" + song_info["name"] + ".mp3")
+    audio_file = eyed3.load(song_path(directory, song_info))
     
     if audio_file.tag is None:
         audio_file.initTag()
         
-    if audio_file.tag is None:  #pragma: no cover
-        logging.error(f"Failed to initialize tags for {song_info['name']}")
+    if audio_file.tag is None:
+        logger.error(f"Failed to initialize tags for {song_info['name']}")
         return
 
     cover_photo_path = directory + COVER_PHOTO
@@ -65,36 +128,31 @@ def set_tags(song_info, genius_obj, directory):
 
         with open(cover_photo_path, "rb") as img_file:
             audio_file.tag.images.set(3, img_file.read(), mime_type)
-    else:   #pragma: no cover
-        logging.error(f"Cover photo not found at: {cover_photo_path}")
+    else:
+        logger.error(f"Cover photo not found at: {cover_photo_path}")
 
     formatted_artist_string = song_info["artist"].replace(",", ";")
     audio_file.tag.artist = formatted_artist_string
     audio_file.tag.title = song_info["name"]
     audio_file.tag.album = song_info["album"]
-    audio_file.tag.year = song_info["year"]
+    year = song_info.get("year") or ""
+    if year.isdigit() and int(year) > 0:
+        audio_file.tag.recording_date = year
 
-    try:
-        lyrics = get_lyrics(song_info["name"], song_info["artist"], genius_obj)
-        if lyrics:
-            audio_file.tag.lyrics.set(lyrics)
-        else:   #pragma: no cover
-            logging.info(f"Lyrics not found for {song_info['name']} by {song_info['artist']}")
-    except Exception as e:  #pragma: no cover
-        logging.error(f"Error setting lyrics for {song_info['name']}: {e}")
+    if genius_obj is not None:
+        try:
+            lyrics = get_lyrics(song_info["name"], song_info["artist"], genius_obj)
+            if lyrics:
+                audio_file.tag.lyrics.set(lyrics)
+            else:
+                logger.info(f"Lyrics not found for {song_info['name']} by {song_info['artist']}")
+        except Exception as e:
+            logger.error(f"Error setting lyrics for {song_info['name']}: {e}")
 
     audio_file.tag.save()
-    os.remove(cover_photo_path)
+    if os.path.exists(cover_photo_path):
+        os.remove(cover_photo_path)
     
-def mark_song_as_compressed(file_path: str) -> None:
-    audio_file = eyed3.load(file_path)
-    if audio_file.tag is None:
-        logging.error(f"Song: {file_path} does not have a tag, cannot mark as compressed")
-        return
-    audio_file.tag.comments.set("compressed")
-    audio_file.tag.save()
-
-
 def format_artists(artist_list):
     artist_combined = ""
 
@@ -106,24 +164,34 @@ def format_artists(artist_list):
     return artist_combined
 
 
+SEARCH_RESULT_LIMIT = 3
+
+
+def search_videos(query, limit=SEARCH_RESULT_LIMIT):
+    options = {"quiet": True, "no_warnings": True, "extract_flat": True, "skip_download": True}
+    with YoutubeDL(options) as search_client:
+        results = search_client.extract_info(f"ytsearch{limit}:{query}", download=False)
+    return (results or {}).get("entries") or []
+
+
 def get_link(song_info):
     min_difference = song_info["duration"]
-    video_search = VideosSearch(song_info["name"] + " " + song_info["artist"], limit=3)
-    best_link = None
+    best_link = ""
 
     try:
-        for search_result in video_search.result()["result"]:
-            duration_str = search_result["duration"].replace(":", " ").split()
-            duration_int = int(duration_str[0]) * 60000 + int(duration_str[1]) * 1000
+        search_results = search_videos(song_info["name"] + " " + song_info["artist"])
+    except Exception as e:
+        logger.error(f"Error getting link for {song_info['name']}: {e}")
+        return best_link
 
-            if abs(duration_int - song_info["duration"]) < min_difference:
-                min_difference = abs(duration_int - song_info["duration"])
-                best_link = search_result["link"]
-    except Exception as e:  # pragma: no cover
-        logging.error(f"Error getting link for {song_info['name']}: {e}")
-
-    if best_link is None:
-        best_link = ""
+    for search_result in search_results:
+        duration = search_result.get("duration")
+        if duration is None:
+            continue
+        difference = abs(int(duration * 1000) - song_info["duration"])
+        if difference < min_difference:
+            min_difference = difference
+            best_link = search_result.get("url") or f"https://www.youtube.com/watch?v={search_result['id']}"
 
     return best_link
 
@@ -131,41 +199,25 @@ def get_link(song_info):
 def download_image(song_info, directory):
     # Get the Cover Art
     image_url = song_info["url"]
-    r = requests.get(image_url)
+    if not image_url:
+        return
+    r = requests.get(image_url, timeout=30)
     with open(directory + COVER_PHOTO, "wb") as f:
         f.write(r.content)
 
 
-def download_song(given_link, song_info, downloader, directory):
-    attempts = 0
-
-    while attempts <= 3:
+def download_song(given_link, song_info, downloader, directory, attempts=DOWNLOAD_ATTEMPTS):
+    target = song_path(directory, song_info)
+    last_error = None
+    for _ in range(attempts):
         try:
-            stdout_buffer = io.StringIO()
-            stderr_buffer = io.StringIO()
-            with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-                downloader.extract_info(given_link)
-            stdout = stdout_buffer.getvalue()
-            stderr = stderr_buffer.getvalue()
-
-            if any(error in stdout for error in throttling_messages) or any(error in stderr for error in throttling_messages):
-                raise RateLimiterException("An error occurred, please try again later.")
-
-            default_song_name = "/downloaded_song.mp3"
-
-            # Overwrite the file, if it exists
-            if os.path.exists(directory + "/" + song_info["name"] + ".mp3"):
-                os.remove(directory + "/" + song_info["name"] + ".mp3")
-            os.rename(directory + default_song_name, directory + "/" + song_info["name"] + ".mp3")
+            downloader.extract_info(given_link)
+            os.replace(os.path.join(directory, DOWNLOADED_SONG), target)
             return
-
-        except Exception as e:  # pragma: no cover
-            if isinstance(e, RateLimiterException):
-                raise e
-            else:   #pragma: no cover
-                logging.error(str(e))
-                attempts += 1
-                continue
+        except Exception as e:
+            last_error = e
+            logger.error(f"Download attempt failed for {song_info['name']}: {e}")
+    raise RuntimeError(f"Could not download {song_info['name']} after {attempts} attempts") from last_error
 
 
 def get_songs(playlist_link, spotify_api):
@@ -181,11 +233,6 @@ def get_songs(playlist_link, spotify_api):
             return songs
     return songs
 
-def get_elapsed(progressbar):
-    elapsed = progressbar.format_dict["elapsed"]
-    return elapsed
-
-
 def get_eta(progressbar):
     rate = progressbar.format_dict["rate"]
     remaining = (
@@ -197,8 +244,9 @@ def get_eta(progressbar):
 # Return formatted song data in a dictionary
 def format_song_data(song):
     song = song["track"]
-    cover_art = song["album"]["images"][0]["url"]
-    year = song["album"]["release_date"].replace("-", " ").split()[0]
+    images = song["album"].get("images") or []
+    cover_art = images[0]["url"] if images else ""
+    year = (song["album"].get("release_date") or "").split("-")[0]
     name = song["name"]
     artist = format_artists(song["artists"])
     album = song["album"]["name"]
@@ -215,24 +263,40 @@ def format_song_data(song):
     return info_dict
 
 
-def download_playlist(playlist_url, authenticator, directory, display_bar=True, normalize_sound=True, song_number_limit=0, progress_callback=None):
+def download_playlist(playlist_url, authenticator, directory, display_bar=True, normalize_sound=True, song_number_limit=0, progress_callback=None, use_exportify=True):
+    configure_error_log()
     ensure_directory_exists(directory)
     audio_downloader = create_audio_downloader(directory)
-    songs = fetch_playlist_songs(playlist_url, authenticator, song_number_limit)
-    filename = None if display_bar else open(os.devnull, "w")
-    playlist_progress = initialize_progress_bar(len(songs), filename)
-    success_counter, failure_counter =  process_songs(songs, audio_downloader, directory, authenticator, playlist_progress, filename, progress_callback)
-    if normalize_sound:
-        normalize_volume_levels(directory, success_counter, failure_counter, progress_callback)
-    playlist_progress.close()
+    songs = fetch_playlist_songs(playlist_url, authenticator, song_number_limit, use_exportify)
+    with contextlib.ExitStack() as stack:
+        filename = None if display_bar else stack.enter_context(open(os.devnull, "w"))
+        playlist_progress = stack.enter_context(initialize_progress_bar(len(songs), filename))
+        success_counter, failure_counter = process_songs(songs, audio_downloader, directory, authenticator, playlist_progress, filename, progress_callback)
+        if normalize_sound:
+            normalize_volume_levels(directory, success_counter, failure_counter, progress_callback)
+    return DownloadResult(total=len(songs), success=success_counter, failure=failure_counter)
 
 def ensure_directory_exists(directory):
     if not os.path.isdir(directory):
         Path(directory).mkdir(parents=True, exist_ok=True)
 
-def fetch_playlist_songs(playlist_url, authenticator, song_number_limit):
-    songs = get_songs(playlist_url, authenticator.spotify_auth)
-    return songs[:song_number_limit] if song_number_limit > 0 else songs
+def fetch_playlist_songs(playlist_url, authenticator, song_number_limit, use_exportify=True):
+    if authenticator.spotify_auth is not None:
+        try:
+            songs = get_songs(playlist_url, authenticator.spotify_auth)
+            return songs[:song_number_limit] if song_number_limit > 0 else songs
+        except (SpotifyException, SpotifyOauthError) as e:
+            logger.error(f"Spotify API request failed, falling back to the public playlist view: {e}")
+
+    track_list = spotify_embed.get_embed_track_list(playlist_url)
+    if use_exportify and spotify_embed.needs_full_list(track_list, song_number_limit) and exportify.is_available():
+        try:
+            return exportify.get_exportify_songs(playlist_url, song_number_limit)
+        except exportify.ExportifyUnavailableError as e:
+            message = f"WARNING: Exportify could not export the full playlist ({e})"
+            logger.warning(message)
+            print(message)
+    return spotify_embed.build_songs(track_list, song_number_limit)
 
 def initialize_progress_bar(playlist_size, filename):
     return tqdm(total=playlist_size, desc="Playlist Progress", position=0, leave=False, file=filename)
@@ -247,6 +311,7 @@ def process_songs(
     progress_callback=None,
 ):
     success_counter, failure_counter = 0, 0
+    current_song, eta = None, 0
 
     def report_progress(current_song, eta, working = True):
         if progress_callback:
@@ -290,7 +355,7 @@ def process_single_song(song, audio_downloader, directory, authenticator,filenam
     
     link = get_link(info_dict)
     if not link:
-        logging.error(f"Failed to download {info_dict['name']} after 3 attempts. Error: Could not find link")
+        logger.error(f"Failed to download {info_dict['name']}: no matching YouTube video found")
         return False
     
     if not download_and_process_song(link, info_dict, audio_downloader, directory, authenticator, song_progress):
@@ -300,7 +365,7 @@ def process_single_song(song, audio_downloader, directory, authenticator,filenam
     return True
 
 def initialize_song_progress(song, filename):
-    return tqdm(total=4, desc=song["track"]["name"], position=1, leave=False, file=filename)
+    return tqdm(total=3, desc=song["track"]["name"], position=1, leave=False, file=filename)
 
 def retrieve_song_info(song, song_progress):
     song_progress.set_description(f"{song_progress.desc}: Formatting Information")
@@ -311,193 +376,122 @@ def download_and_process_song(link, info_dict, audio_downloader, directory, auth
     try:
         download_song_with_retry(link, info_dict, audio_downloader, directory, song_progress)
         set_song_tags(info_dict, authenticator, directory, song_progress)
-        move_song_to_folder(info_dict, song_progress)
         return True
     except Exception as e:
-        logging.error(f"Failed to download {info_dict['name']} after 3 attempts. Error: {str(e)}")
+        logger.error(f"Failed to download {info_dict['name']}: {e}")
         return False
 
 def download_song_with_retry(link, info_dict, audio_downloader, directory, song_progress):
     song_progress.set_description(f"{info_dict['name']}: Downloading Song")
     song_progress.update(n=1)
-    
-    try:
-        download_song(link, info_dict, audio_downloader, directory)
-    except RateLimiterException:
-        logging.error(f"Rate limiter error when downloading {info_dict['name']}")
-        audio_downloader = create_audio_downloader(directory)
-        download_song(link, info_dict, audio_downloader, directory)
+    download_song(link, info_dict, audio_downloader, directory)
 
 def set_song_tags(info_dict, authenticator, directory, song_progress):
     song_progress.set_description(f"{info_dict['name']}: Setting Tags")
     song_progress.update(n=1)
     set_tags(info_dict, authenticator.genius_auth, directory)
 
-def move_song_to_folder(info_dict, song_progress):
-    song_progress.set_description(f"{info_dict['name']}: Moving to designated folder")
-    song_progress.update(n=1)
-
 def update_progress(playlist_progress):
     playlist_progress.update(n=1)
 
-# Create downloader object, pass options
 def create_audio_downloader(directory: str) -> YoutubeDL:
-    if not DependencyHandler.ffmpeg_installed(): #pragma: no cover
-        audio_downloader: YoutubeDL = YoutubeDL(
-            {
-                "format": "bestaudio",
-                "ffmpeg_location": ".",
-                "postprocessors": [
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": "mp3",
-                        "preferredquality": "192",
-                    }
-                ],
-                "outtmpl": directory + "/downloaded_song.%(ext)s",
-                "quiet": "true",
-                "no_warnings": "true",
-                "noprogress": "true",
-            }
-        )
-
-    else:
-        audio_downloader: YoutubeDL = YoutubeDL(
-            {
-                "format": "bestaudio",
-                "postprocessors": [
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": "mp3",
-                        "preferredquality": "192",
-                    }
-                ],
-                "outtmpl": directory + "/downloaded_song.%(ext)s",
-                "quiet": "true",
-                "no_warnings": "true",
-                "noprogress": "true",
-            }
-        )
-    return audio_downloader
-
-def match_target_amplitude(sound: AudioSegment, target_dbfs: float) -> AudioSegment:
-    change_in_dbfs = target_dbfs - sound.dBFS
-    return sound.apply_gain(change_in_dbfs)
+    return YoutubeDL(
+        {
+            "format": "bestaudio",
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ],
+            "outtmpl": directory + "/downloaded_song.%(ext)s",
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+        }
+    )
 
 
-def _restore_audio_tags(file_path: str, tags: dict) -> None:
-    if tags:
-        audio_file = eyed3.load(file_path)
-        if audio_file.tag is None:
-            audio_file.initTag()
+def measure_mean_volume(file_path):
+    command = ["ffmpeg", "-hide_banner", "-nostats", "-i", file_path, "-map", "0:a", "-af", "volumedetect", "-f", "null", "-"]
+    result = run_subprocess_with_flags(command, capture_output=True, text=True)
+    match = MEAN_VOLUME_PATTERN.search(result.stderr or "")
+    if match is None:
+        raise RuntimeError(f"Could not measure the volume of {file_path}: {(result.stderr or '').strip()[-300:]}")
+    return float(match.group(1))
 
-        audio_file.tag.artist = tags.get("artist")
-        audio_file.tag.title = tags.get("title")
-        audio_file.tag.album = tags.get("album")
-        audio_file.tag.lyrics.set(tags.get("lyrics", ""))
-        
-        # Restore images
-        for image_path in tags.get("images", []):
-            with open(image_path, "rb") as img_file:
-                audio_file.tag.images.set(3, img_file.read(), "image/jpeg")
-            os.remove(image_path)  # Delete image after restoration
-        
-        audio_file.tag.save()
 
-def _extract_tags(audio_file) -> dict:
-    if not audio_file or not audio_file.tag:
-        return {"artist": "", "title": "", "album": "", "lyrics": "", "images": []}
-    
-    tags = {
-        "artist": audio_file.tag.artist or "",
-        "title": audio_file.tag.title or "",
-        "album": audio_file.tag.album or "",
-        "lyrics": audio_file.tag.lyrics[0].text if audio_file.tag.lyrics else "",
-        "images": []
-    }
-    
-    return tags
+def normalize_file(file_path, target_dbfs=TARGET_LOUDNESS_DBFS):
+    original = eyed3.load(file_path)
+    mean_volume = measure_mean_volume(file_path)
+    gain = target_dbfs - mean_volume if math.isfinite(mean_volume) else 0.0
+    temp_path = file_path + ".normalizing.mp3"
+    command = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", file_path,
+        "-map", "0:a", "-map_metadata", "-1", "-af", f"volume={gain:.2f}dB",
+        "-c:a", "libmp3lame", "-b:a", NORMALIZED_BITRATE, temp_path,
+    ]
+    result = run_subprocess_with_flags(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise RuntimeError(f"ffmpeg could not normalize {file_path}: {(result.stderr or '').strip()[-300:]}")
 
-def _save_images(directory: str, audio_file, tags: dict) -> None:
-    try:
-        if not audio_file or not audio_file.tag:
-            return
-        
-        for image in audio_file.tag.images:
-            image_path = os.path.join(directory, f"{tags['artist']} - {tags['album']}({image.picture_type}).jpg")
-            with open(image_path, "wb") as img_file:
-                img_file.write(image.image_data)
-            tags["images"].append(image_path)
-    except Exception as e:  #pragma: no cover
-        logging.error(f"Error saving images: {e}")
+    tag = original.tag if original is not None else None
+    if tag is None:
+        normalized = eyed3.load(temp_path)
+        normalized.initTag()
+        tag = normalized.tag
+    tag.comments.set(NORMALIZED_MARKER)
+    tag.save(temp_path)
+    os.replace(temp_path, file_path)
+
 
 def normalize_volume_levels(directory: str, success_counter, failure_counter, progress_callback=None) -> None:
-    if not DependencyHandler.ffmpeg_installed():  # pragma: no cover
-        print("WARNING: ffmpeg not found in PATH, volume normalization skipped.")
-        return
-
     if not os.path.isdir(directory):
         raise ValueError("Invalid directory")
 
-    abs_path: str = os.path.abspath(directory)
-    files: list = [f for f in os.listdir(directory) if f.endswith(".mp3") and not is_song_processed(os.path.join(abs_path, f))]
+    abs_path = os.path.abspath(directory)
+    files = [f for f in sorted(os.listdir(abs_path)) if f.endswith(".mp3") and not is_song_processed(os.path.join(abs_path, f))]
+    normalization_progress = tqdm(total=len(files), desc="Normalizing Sound", position=0, leave=False)
+    current_file = None
 
-    normalization_progress: tqdm = tqdm(
-        total=len(files), desc="Normalizing Sound", position=0, leave=False
-    )
- 
-    processed_files = 0
-    for file in files:
+    def report_progress(working):
         if progress_callback:
             eta = get_eta(normalization_progress)
-            progress_callback(normalization_progress.n, normalization_progress.total,success_counter, failure_counter, file, eta, True, True, processed_files)
-                    
-        file_path = os.path.join(abs_path, file)
+            progress_callback(
+                normalization_progress.n, normalization_progress.total, success_counter, failure_counter,
+                current_file, eta, working, working, normalization_progress.n,
+            )
 
-        # Load original tags and save images
-        audio_file = eyed3.load(file_path)
-        tags = _extract_tags(audio_file)
-        _save_images(directory, audio_file, tags)
-
-        # Normalize audio
-        sound: AudioSegment = AudioSegment.from_file(file_path, "mp3")
-        normalized_sound: AudioSegment = match_target_amplitude(sound, -14.0)
-        normalized_sound.export(file_path, format="mp3")
-
-        # Restore tags
-        _restore_audio_tags(file_path, tags)
-        mark_song_as_compressed(file_path)
+    for file in files:
+        current_file = file
+        report_progress(True)
+        try:
+            normalize_file(os.path.join(abs_path, file))
+        except Exception as e:
+            logger.error(f"Volume normalization failed for {file}: {e}")
         normalization_progress.update(n=1)
-        processed_files += 1
-        
-    if progress_callback:
-        eta = get_eta(normalization_progress)
-        progress_callback(normalization_progress.n, normalization_progress.total,success_counter, failure_counter, file, eta, True, True, processed_files)
-        
+
+    normalization_progress.close()
+    report_progress(False)
+
+
 def is_song_processed(file_path):
     try:
-        cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_format",
-            "-show_streams",
-            "-print_format",
-            "json",
-            file_path,
-        ]
-        result = run_subprocess_with_flags(cmd, capture_output=True, text=True)
-        metadata = json.loads(result.stdout)
-        song_tags = metadata.get("format", {}).get("tags", {})
-        return song_tags.get("comment") == "compressed"
+        audio_file = eyed3.load(file_path)
+        if audio_file is None or audio_file.tag is None:
+            return False
+        return any(comment.text == NORMALIZED_MARKER for comment in audio_file.tag.comments)
     except Exception as e:
-        logging.error(
-            f"Error while parsing metadata for song:{file_path}. ERROR MESSAGE: {e}"
-        )
+        logger.error(f"Error while reading tags for song: {file_path}. ERROR MESSAGE: {e}")
         return False
-    
+
+
 def run_subprocess_with_flags(cmd, **kwargs):
-    if sys.platform == "win32": #pragma: no cover
+    if sys.platform == "win32":
         kwargs["encoding"] = "utf-8"
+        kwargs["errors"] = "replace"
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     return subprocess.run(cmd, **kwargs)
