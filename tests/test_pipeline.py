@@ -302,7 +302,7 @@ class TestSafeFilename:
         [
             ("Normal Song", "Normal Song"),
             ("AC/DC Tribute", "AC-DC Tribute"),
-            ("Left\Right | Center", "Left-Right - Center"),
+            ("Left\\Right | Center", "Left-Right - Center"),
             ("Why? Because: \"Reasons\" <3 *", "Why Because Reasons 3"),
             ("...Baby One More Time", "Baby One More Time"),
             ("Trailing dot.", "Trailing dot"),
