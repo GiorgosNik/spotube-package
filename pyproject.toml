@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-exportify = ["playwright>=1.64.1"]
+exportify = ["playwright>=1.65.2"]
 
 [project.scripts]
 spotube = "spotube.cli:main"
@@ -30,7 +30,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=7.0",
     "pytest-socket>=0.7",
-    "ruff>=0.12",
+    "ruff>=0.17.5",
 ]
 
 [tool.poetry]
